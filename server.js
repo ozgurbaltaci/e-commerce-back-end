@@ -14,26 +14,19 @@ app.post("/createPayment", async (req, res) => {
       secretKey: "sandbox-0bt2hNbgRkJwqPCMNITPpG5XBb7xzLnV",
       uri: "https://sandbox-api.iyzipay.com",
     });
+    const { price, paidPrice, paymentCard, shippingAddress } = req.body;
 
-    // Ödeme oluşturma isteği burada oluşturulmalı
     var request = {
       locale: Iyzipay.LOCALE.TR,
       conversationId: "123456789",
-      price: "1",
-      paidPrice: "1.2",
+      price: price,
+      paidPrice: paidPrice,
       currency: Iyzipay.CURRENCY.TRY,
       installment: "1",
       basketId: "B67832",
       paymentChannel: Iyzipay.PAYMENT_CHANNEL.WEB,
       paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
-      paymentCard: {
-        cardHolderName: "John Doe",
-        cardNumber: "4127111111111113",
-        expireMonth: "12",
-        expireYear: "2030",
-        cvc: "123",
-        registerCard: "0",
-      },
+      paymentCard: paymentCard,
       buyer: {
         id: "BY789",
         name: "John",
@@ -50,20 +43,8 @@ app.post("/createPayment", async (req, res) => {
         country: "Turkey",
         zipCode: "34732",
       },
-      shippingAddress: {
-        contactName: "Jane Doe",
-        city: "Istanbul",
-        country: "Turkey",
-        address: "Nidakule Göztepe, Merdivenköy Mah. Bora Sok. No:1",
-        zipCode: "34742",
-      },
-      billingAddress: {
-        contactName: "Jane Doe",
-        city: "Istanbul",
-        country: "Turkey",
-        address: "Nidakule Göztepe, Merdivenköy Mah. Bora Sok. No:1",
-        zipCode: "34742",
-      },
+      shippingAddress: shippingAddress,
+      billingAddress: shippingAddress,
       basketItems: [
         {
           id: "BI101",
@@ -71,34 +52,29 @@ app.post("/createPayment", async (req, res) => {
           category1: "Collectibles",
           category2: "Accessories",
           itemType: Iyzipay.BASKET_ITEM_TYPE.PHYSICAL,
-          price: "0.3",
+          price: "19.99",
         },
-        {
-          id: "BI102",
-          name: "Game code",
-          category1: "Game",
-          category2: "Online Game Items",
-          itemType: Iyzipay.BASKET_ITEM_TYPE.VIRTUAL,
-          price: "0.5",
-        },
+
         {
           id: "BI103",
           name: "Usb",
           category1: "Electronics",
           category2: "Usb / Cable",
           itemType: Iyzipay.BASKET_ITEM_TYPE.PHYSICAL,
-          price: "0.2",
+          price: "10.99",
         },
       ],
     };
 
     iyzipay.payment.create(request, function (err, result) {
-      if (err) {
-        console.error("ödeme alınamadı", err);
-        return res.status(500).json({ error: "Payment creation failed" });
-      }
+      console.log("card number: -", paymentCard.cardNumber, "-");
       console.log(result);
-      res.json(result); // Ödeme sonucunu yanıt olarak döndürün
+      if (result.status !== "success") {
+        console.error("ödeme alınamadı", result, err);
+        return res.status(500).json({ error: "Payment creation failed" });
+      } else {
+        res.status(200).send();
+      }
     });
   } catch (err) {
     console.error(err.message);
