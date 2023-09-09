@@ -14,7 +14,8 @@ app.post("/createPayment", async (req, res) => {
       secretKey: "sandbox-0bt2hNbgRkJwqPCMNITPpG5XBb7xzLnV",
       uri: "https://sandbox-api.iyzipay.com",
     });
-    const { price, paidPrice, paymentCard, shippingAddress } = req.body;
+    const { price, paidPrice, paymentCard, basketItems, shippingAddress } =
+      req.body;
 
     var request = {
       locale: Iyzipay.LOCALE.TR,
@@ -45,25 +46,7 @@ app.post("/createPayment", async (req, res) => {
       },
       shippingAddress: shippingAddress,
       billingAddress: shippingAddress,
-      basketItems: [
-        {
-          id: "BI101",
-          name: "Binocular",
-          category1: "Collectibles",
-          category2: "Accessories",
-          itemType: Iyzipay.BASKET_ITEM_TYPE.PHYSICAL,
-          price: "19.99",
-        },
-
-        {
-          id: "BI103",
-          name: "Usb",
-          category1: "Electronics",
-          category2: "Usb / Cable",
-          itemType: Iyzipay.BASKET_ITEM_TYPE.PHYSICAL,
-          price: "10.99",
-        },
-      ],
+      basketItems: basketItems,
     };
 
     iyzipay.payment.create(request, function (err, result) {
