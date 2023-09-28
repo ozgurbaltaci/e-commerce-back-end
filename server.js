@@ -1,11 +1,94 @@
+require("dotenv").config();
 const express = require("express");
 const app = express();
 const cors = require("cors");
 const pool = require("./db");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 var Iyzipay = require("iyzipay");
 
 app.use(cors());
 app.use(express.json());
+
+function verifyAccessToken(req, res, next) {
+  const authHeader = req.headers["authorization"];
+  const accessToken = authHeader && authHeader.split(" ")[1];
+
+  if (!accessToken) {
+    return res.status(401).json({ message: "Access token not provided" });
+  }
+
+  jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: "Access token is not valid" });
+    }
+    req.user = user;
+    next();
+  });
+}
+
+app.post("/register", async (req, res) => {
+  try {
+    const hashedPassword = await bcrypt.hash(req.body.user_password, 10);
+    const { user_name, user_surname, user_mail, user_phone, user_role } =
+      req.body;
+    const request = await pool.query(
+      "INSERT INTO users (user_id, user_name, user_surname, user_mail, user_phone, user_role, user_password) VALUES (default, $1, $2, $3, $4, $5, $6)",
+      [
+        user_name,
+        user_surname,
+        user_mail,
+        user_phone,
+        user_role,
+        hashedPassword,
+      ]
+    );
+
+    res.status(201).send();
+  } catch (err) {
+    res.status(500).send();
+    console.error(err.message);
+  }
+});
+
+app.post("/login", async (req, res) => {
+  try {
+    const { user_mail, user_password } = req.body;
+
+    // Check if the user with the provided email exists in the database
+    const user = await pool.query("SELECT * FROM users WHERE user_mail = $1", [
+      user_mail,
+    ]);
+
+    if (user.rows.length === 0) {
+      return res.status(401).json({ message: "User can not be found" });
+    }
+
+    // Compare the provided password with the hashed password stored in the database
+    const passwordMatch = await bcrypt.compare(
+      user_password,
+      user.rows[0].user_password
+    );
+
+    if (!passwordMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // If the credentials are valid, generate an access token
+    const accessToken = jwt.sign(
+      { userId: user.rows[0].user_id },
+      process.env.ACCESS_TOKEN_SECRET,
+      {
+        expiresIn: "1h", // Set an expiration time for the access token
+      }
+    );
+
+    res.status(200).json({ accessToken });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
 
 app.post("/createPayment", async (req, res) => {
   try {
