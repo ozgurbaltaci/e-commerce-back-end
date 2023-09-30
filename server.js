@@ -10,28 +10,48 @@ var Iyzipay = require("iyzipay");
 app.use(cors());
 app.use(express.json());
 
-function verifyAccessToken(req, res, next) {
-  const authHeader = req.headers["authorization"];
-  const accessToken = authHeader && authHeader.split(" ")[1];
+function verifyToken(req, res, next) {
+  const token = req.header("Authorization");
 
-  if (!accessToken) {
-    return res.status(401).json({ message: "Access token not provided" });
+  if (!token) {
+    return res
+      .status(401)
+      .json({ message: "Access denied, token not provided" });
   }
 
-  jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ message: "Access token is not valid" });
-    }
-    req.user = user;
+  try {
+    const decoded = jwt.verify(token.replace("Bearer ", ""), secret);
+    req.user = decoded; // Store user information in the request for later use
     next();
-  });
+  } catch (err) {
+    res.status(401).json({ message: "Invalid token" });
+  }
 }
 
 app.post("/register", async (req, res) => {
+  console.log("bodymiz: ", req.body);
   try {
-    const hashedPassword = await bcrypt.hash(req.body.user_password, 10);
-    const { user_name, user_surname, user_mail, user_phone, user_role } =
-      req.body;
+    const {
+      user_name,
+      user_surname,
+      user_mail,
+      user_phone,
+      user_role,
+      user_password,
+    } = req.body;
+    const hashedPassword = await bcrypt.hash(user_password, 10);
+
+    // Check if required fields are empty
+    if (
+      !user_name ||
+      !user_surname ||
+      !user_mail ||
+      !user_phone ||
+      !user_role ||
+      !user_password
+    ) {
+      return res.status(400).json({ error: "All fields are required." });
+    }
     const request = await pool.query(
       "INSERT INTO users (user_id, user_name, user_surname, user_mail, user_phone, user_role, user_password) VALUES (default, $1, $2, $3, $4, $5, $6)",
       [
@@ -135,11 +155,11 @@ app.post("/createPayment", async (req, res) => {
     iyzipay.payment.create(request, function (err, result) {
       console.log("card number: -", paymentCard.cardNumber, "-");
       console.log(result);
-      if (result.status !== "success") {
+      if (result.status === "success") {
+        res.status(200).send();
+      } else {
         console.error("ödeme alınamadı", result, err);
         return res.status(500).json({ error: "Payment creation failed" });
-      } else {
-        res.status(200).send();
       }
     });
   } catch (err) {
