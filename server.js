@@ -29,42 +29,54 @@ function verifyToken(req, res, next) {
 }
 
 app.post("/register", async (req, res) => {
-  console.log("bodymiz: ", req.body);
+  const {
+    user_name,
+    user_surname,
+    user_mail,
+    user_phone,
+    user_role,
+    user_password,
+  } = req.body;
+  const hashedPassword = await bcrypt.hash(user_password, 10);
+
+  // Check if required fields are empty
+  if (
+    !user_name ||
+    !user_surname ||
+    !user_mail ||
+    !user_phone ||
+    !user_role ||
+    !user_password
+  ) {
+    return res.status(400).json({ error: "All fields are required." });
+  }
   try {
-    const {
-      user_name,
-      user_surname,
-      user_mail,
-      user_phone,
-      user_role,
-      user_password,
-    } = req.body;
-    const hashedPassword = await bcrypt.hash(user_password, 10);
-
-    // Check if required fields are empty
-    if (
-      !user_name ||
-      !user_surname ||
-      !user_mail ||
-      !user_phone ||
-      !user_role ||
-      !user_password
-    ) {
-      return res.status(400).json({ error: "All fields are required." });
-    }
-    const request = await pool.query(
-      "INSERT INTO users (user_id, user_name, user_surname, user_mail, user_phone, user_role, user_password) VALUES (default, $1, $2, $3, $4, $5, $6)",
-      [
-        user_name,
-        user_surname,
-        user_mail,
-        user_phone,
-        user_role,
-        hashedPassword,
-      ]
+    const checkMail = await pool.query(
+      "SELECT user_mail from users WHERE user_mail=$1",
+      [user_mail]
     );
+    if (checkMail.rows.length > 0) {
+      return res.status(409).json({ error: "All fields are required." });
+    } else {
+      try {
+        const request = await pool.query(
+          "INSERT INTO users (user_id, user_name, user_surname, user_mail, user_phone, user_role, user_password) VALUES (default, $1, $2, $3, $4, $5, $6)",
+          [
+            user_name,
+            user_surname,
+            user_mail,
+            user_phone,
+            user_role,
+            hashedPassword,
+          ]
+        );
 
-    res.status(201).send();
+        res.status(201).send();
+      } catch (err) {
+        res.status(500).send();
+        console.error(err.message);
+      }
+    }
   } catch (err) {
     res.status(500).send();
     console.error(err.message);
