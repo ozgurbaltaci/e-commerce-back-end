@@ -11,20 +11,14 @@ app.use(cors());
 app.use(express.json());
 
 function verifyToken(req, res, next) {
-  const token = req.header("Authorization");
-
-  if (!token) {
-    return res
-      .status(401)
-      .json({ message: "Access denied, token not provided" });
-  }
-
-  try {
-    const decoded = jwt.verify(token.replace("Bearer ", ""), secret);
-    req.user = decoded; // Store user information in the request for later use
+  const bearerHeader = req.headers["authorization"];
+  if (typeof bearerHeader !== "undefined") {
+    const bearer = bearerHeader.split(" ");
+    const bearerToken = bearer[1];
+    req.token = bearerToken;
     next();
-  } catch (err) {
-    res.status(401).json({ message: "Invalid token" });
+  } else {
+    res.sendStatus(403);
   }
 }
 
@@ -125,62 +119,69 @@ app.post("/login", async (req, res) => {
   }
 });
 
-app.post("/createPayment", async (req, res) => {
-  try {
-    const iyzipay = new Iyzipay({
-      apiKey: "sandbox-6NF29GbdT3I4IMUgWKdjRUIfAp25JUR4",
-      secretKey: "sandbox-0bt2hNbgRkJwqPCMNITPpG5XBb7xzLnV",
-      uri: "https://sandbox-api.iyzipay.com",
-    });
-    const { price, paidPrice, paymentCard, basketItems, shippingAddress } =
-      req.body;
+app.post("/createPayment", verifyToken, async (req, res) => {
+  jwt.verify(req.token, process.env.ACCESS_TOKEN_SECRET, (err, authData) => {
+    if (err) {
+      console.log(err);
+      res.sendStatus(403);
+    } else {
+      try {
+        const iyzipay = new Iyzipay({
+          apiKey: "sandbox-6NF29GbdT3I4IMUgWKdjRUIfAp25JUR4",
+          secretKey: "sandbox-0bt2hNbgRkJwqPCMNITPpG5XBb7xzLnV",
+          uri: "https://sandbox-api.iyzipay.com",
+        });
+        const { price, paidPrice, paymentCard, basketItems, shippingAddress } =
+          req.body;
 
-    var request = {
-      locale: Iyzipay.LOCALE.TR,
-      conversationId: "123456789",
-      price: price,
-      paidPrice: paidPrice,
-      currency: Iyzipay.CURRENCY.TRY,
-      installment: "1",
-      basketId: "B67832",
-      paymentChannel: Iyzipay.PAYMENT_CHANNEL.WEB,
-      paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
-      paymentCard: paymentCard,
-      buyer: {
-        id: "BY789",
-        name: "John",
-        surname: "Doe",
-        gsmNumber: "+905350000000",
-        email: "email@email.com",
-        identityNumber: "74300864791",
-        lastLoginDate: "2015-10-05 12:43:35",
-        registrationDate: "2013-04-21 15:12:09",
-        registrationAddress:
-          "Nidakule Göztepe, Merdivenköy Mah. Bora Sok. No:1",
-        ip: "85.34.78.112",
-        city: "Istanbul",
-        country: "Turkey",
-        zipCode: "34732",
-      },
-      shippingAddress: shippingAddress,
-      billingAddress: shippingAddress,
-      basketItems: basketItems,
-    };
+        var request = {
+          locale: Iyzipay.LOCALE.TR,
+          conversationId: "123456789",
+          price: price,
+          paidPrice: paidPrice,
+          currency: Iyzipay.CURRENCY.TRY,
+          installment: "1",
+          basketId: "B67832",
+          paymentChannel: Iyzipay.PAYMENT_CHANNEL.WEB,
+          paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
+          paymentCard: paymentCard,
+          buyer: {
+            id: "BY789",
+            name: "John",
+            surname: "Doe",
+            gsmNumber: "+905350000000",
+            email: "email@email.com",
+            identityNumber: "74300864791",
+            lastLoginDate: "2015-10-05 12:43:35",
+            registrationDate: "2013-04-21 15:12:09",
+            registrationAddress:
+              "Nidakule Göztepe, Merdivenköy Mah. Bora Sok. No:1",
+            ip: "85.34.78.112",
+            city: "Istanbul",
+            country: "Turkey",
+            zipCode: "34732",
+          },
+          shippingAddress: shippingAddress,
+          billingAddress: shippingAddress,
+          basketItems: basketItems,
+        };
 
-    iyzipay.payment.create(request, function (err, result) {
-      console.log("card number: -", paymentCard.cardNumber, "-");
-      console.log(result);
-      if (result.status === "success") {
-        res.status(200).send();
-      } else {
-        console.error("ödeme alınamadı", result, err);
-        return res.status(500).json({ error: "Payment creation failed" });
+        iyzipay.payment.create(request, function (err, result) {
+          console.log("card number: -", paymentCard.cardNumber, "-");
+          console.log(result);
+          if (result.status === "success") {
+            res.status(200).send();
+          } else {
+            console.error("ödeme alınamadı", result, err);
+            return res.status(500).json({ error: "Payment creation failed" });
+          }
+        });
+      } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server Error");
       }
-    });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Server Error");
-  }
+    }
+  });
 });
 
 app.get("/getDeneme", async (req, res) => {
