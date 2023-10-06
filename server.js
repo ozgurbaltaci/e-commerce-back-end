@@ -95,7 +95,6 @@ app.post("/login", async (req, res) => {
     if (user.rows.length === 0) {
       return res.status(401).json({ message: "User can not be found" });
     }
-
     // Compare the provided password with the hashed password stored in the database
     const passwordMatch = await bcrypt.compare(
       user_password,
@@ -115,7 +114,11 @@ app.post("/login", async (req, res) => {
       }
     );
 
-    res.status(200).json({ accessToken });
+    res.status(200).json({
+      user_id: user.rows[0].user_id,
+      accessToken: accessToken,
+      user_name: user.rows[0].user_name,
+    });
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server Error");
