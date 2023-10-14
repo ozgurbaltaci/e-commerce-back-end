@@ -9,7 +9,14 @@ var Iyzipay = require("iyzipay");
 const bodyParser = require("body-parser");
 
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json({ limit: "50mb" }));
+app.use(
+  bodyParser.urlencoded({
+    limit: "50mb",
+    extended: true,
+    parameterLimit: 50000,
+  })
+);
 
 function verifyToken(req, res, next) {
   const bearerHeader = req.headers["authorization"];
@@ -22,6 +29,51 @@ function verifyToken(req, res, next) {
     res.sendStatus(403);
   }
 }
+app.post("/uploadProduct", async (req, res) => {
+  const {
+    manufacturerName,
+    productName,
+    price,
+    discountedPrice,
+    image,
+    category,
+    description,
+    stockQuantity,
+    toBeDeliveredDate,
+    productStatus,
+  } = req.body;
+
+  try {
+    const addProductQuery = await pool.query(
+      "INSERT INTO products VALUES (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      [
+        manufacturerName,
+        productName,
+        parseFloat(price),
+        parseFloat(discountedPrice),
+        image,
+        category,
+        description,
+        parseInt(stockQuantity),
+        toBeDeliveredDate,
+        productStatus,
+      ]
+    );
+    //const product_id = addProductQuery.rows[0].product_id;
+
+    /**const addProduct_campaigns_query = await pool.query(
+      "INSERT INTO product_campaigns VALUES ($1, $2, $3)",
+      [
+        product_id,
+        campaigns.campaign_text,
+        campaigns.campaign_validity_end_date,
+      ]
+    ); */
+  } catch (err) {
+    res.status(500).send();
+    console.error(err.message);
+  }
+});
 
 app.post("/register", async (req, res) => {
   const {
