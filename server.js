@@ -6,6 +6,7 @@ const pool = require("./db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 var Iyzipay = require("iyzipay");
+const bodyParser = require("body-parser");
 
 app.use(cors());
 app.use(express.json());
@@ -167,8 +168,6 @@ app.post("/createPayment", verifyToken, async (req, res) => {
         };
 
         iyzipay.payment.create(request, function (err, result) {
-          console.log("card number: -", paymentCard.cardNumber, "-");
-          console.log(result);
           if (result.status === "success") {
             res.status(200).send();
           } else {
@@ -177,7 +176,7 @@ app.post("/createPayment", verifyToken, async (req, res) => {
           }
         });
       } catch (err) {
-        console.error(err.message);
+        console.log(err.message);
         res.status(500).send("Server Error");
       }
     }
@@ -190,6 +189,71 @@ app.get("/getDeneme", async (req, res) => {
     res.json(allUsers.rows);
   } catch (err) {
     console.error(err.message);
+  }
+});
+
+function calculateAverageRating(reviews) {
+  if (reviews.length === 0) {
+    return 0; // Default to 0 if there are no reviews.
+  }
+
+  let sum = 0.0;
+  reviews.map((review, index) => {
+    sum = sum + parseFloat(review.rating);
+  });
+  return sum / reviews.length;
+}
+
+app.get("/getProducts", async (req, res) => {
+  try {
+    // Fetch all products from the Products table
+    const productsRequest = await pool.query("SELECT * FROM products");
+    const productsRows = productsRequest.rows;
+
+    // Create an array to hold all product data
+    const products = await Promise.all(
+      productsRows.map(async (item) => {
+        const productId = item.id;
+
+        // Fetch product variations, reviews, shipping information, related products, and campaigns for each product
+        const variationsQuery = `SELECT * FROM product_variations WHERE product_id = $1`;
+        const variationsRows = await pool.query(variationsQuery, [productId]);
+
+        const ratingPointQuery = `SELECT rating FROM product_reviews WHERE product_id = $1`;
+        const ratings = await pool.query(ratingPointQuery, [productId]);
+
+        const campaignsQuery = `SELECT campaign_text FROM product_campaigns WHERE product_id = $1`;
+        const campaignsRows = await pool.query(campaignsQuery, [productId]);
+
+        // Create the JSON response object for the current product
+        const productData = {
+          id: item.id,
+          manufacturerName: item.manufacturer_name,
+          productName: item.product_name,
+          price: item.price,
+          discountedPrice: item.discounted_price,
+          image: item.image,
+          description: item.description,
+          stockQuantity: item.stock_quantity,
+          toBeDeliveredDate: item.to_be_delivered_date,
+          productStatus: item.product_status,
+
+          variations: variationsRows.rows,
+          ratingsCount: ratings.rows.length,
+          starPoint: calculateAverageRating(ratings.rows),
+
+          campaigns: campaignsRows.rows.map(
+            (campaign) => campaign.campaign_text
+          ),
+        };
+        return productData;
+      })
+    );
+
+    res.json(products);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
