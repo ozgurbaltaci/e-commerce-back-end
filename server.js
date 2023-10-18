@@ -356,6 +356,62 @@ app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
   }
 });
 
+app.get("/getFavoritesIdsOfUser/:user_id", async (req, res) => {
+  try {
+    // Get the user_id from the URL parameter
+    const user_id = req.params.user_id;
+
+    // Fetch favorite products for the specified user
+    const favoritesQuery =
+      "SELECT product_id FROM users_favorites WHERE user_id = $1 ";
+
+    const favoritesIdsRequest = await pool.query(favoritesQuery, [user_id]);
+    const favoriteProductsIds = favoritesIdsRequest.rows.map(
+      (row) => row.product_id
+    );
+
+    res.json(favoriteProductsIds);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/addToFavorite/:user_id", async (req, res) => {
+  const user_id = req.params.user_id;
+
+  const { product_id } = req.body;
+
+  try {
+    const request = await pool.query(
+      "INSERT INTO users_favorites (id, user_id, product_id) VALUES (default, $1, $2)",
+      [user_id, product_id]
+    );
+
+    res.status(201).send();
+  } catch (err) {
+    res.status(500).send();
+    console.error(err.message);
+  }
+});
+
+app.delete("/removeFromFavorite/:user_id/:product_id", async (req, res) => {
+  const user_id = req.params.user_id;
+  const product_id = req.params.product_id;
+
+  try {
+    const request = await pool.query(
+      "DELETE FROM users_favorites WHERE user_id = $1 AND product_id = $2",
+      [user_id, product_id]
+    );
+
+    res.status(200).send();
+  } catch (err) {
+    res.status(500).send();
+    console.error(err.message);
+  }
+});
+
 app.listen(3002, () => {
   console.log("Server has started on port 3002");
 });
