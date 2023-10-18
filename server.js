@@ -334,6 +334,28 @@ app.get("/getProducts", async (req, res) => {
   }
 });
 
+app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
+  try {
+    // Get the user_id from the URL parameter
+    const user_id = req.params.user_id;
+
+    // Fetch favorite products for the specified user
+    const favoritesQuery =
+      "SELECT p.image, p.price, p.discounted_price, p.manufacturer_name, p.product_name " +
+      "FROM users_favorites uf " +
+      "JOIN products p ON uf.product_id = p.id " +
+      "WHERE uf.user_id = $1";
+
+    const favoritesRequest = await pool.query(favoritesQuery, [user_id]);
+    const favoriteProducts = favoritesRequest.rows;
+
+    res.json(favoriteProducts);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.listen(3002, () => {
   console.log("Server has started on port 3002");
 });
