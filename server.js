@@ -40,12 +40,13 @@ app.post("/uploadProduct", async (req, res) => {
     description,
     stockQuantity,
     toBeDeliveredDate,
+    campaigns,
     productStatus,
   } = req.body;
 
   try {
     const addProductQuery = await pool.query(
-      "INSERT INTO products VALUES (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      "INSERT INTO products VALUES (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
       [
         manufacturerName,
         productName,
@@ -59,16 +60,16 @@ app.post("/uploadProduct", async (req, res) => {
         productStatus,
       ]
     );
-    //const product_id = addProductQuery.rows[0].product_id;
 
-    /**const addProduct_campaigns_query = await pool.query(
-      "INSERT INTO product_campaigns VALUES ($1, $2, $3)",
-      [
+    const product_id = addProductQuery.rows[0].id;
+
+    for (const campaign of campaigns) {
+      await pool.query("INSERT INTO product_campaigns VALUES ($1, $2, $3)", [
         product_id,
-        campaigns.campaign_text,
-        campaigns.campaign_validity_end_date,
-      ]
-    ); */
+        campaign.type,
+        campaign.campaign_validity_end_date,
+      ]);
+    }
   } catch (err) {
     res.status(500).send();
     console.error(err.message);
@@ -155,6 +156,7 @@ app.post("/login", async (req, res) => {
     // If the credentials are valid, generate an access token
     const accessToken = jwt.sign(
       { userId: user.rows[0].user_id },
+
       process.env.ACCESS_TOKEN_SECRET,
       {
         expiresIn: "1h", // Set an expiration time for the access token
@@ -163,6 +165,7 @@ app.post("/login", async (req, res) => {
 
     res.status(200).json({
       user_id: user.rows[0].user_id,
+      userFullName: `${user.rows[0].user_name} ${user.rows[0].user_surname}`,
       accessToken: accessToken,
       user_name: user.rows[0].user_name,
     });
@@ -258,27 +261,36 @@ function calculateAverageRating(reviews) {
 
 app.get("/getProducts", async (req, res) => {
   try {
-    // Fetch all products from the Products table
-    const productsRequest = await pool.query("SELECT * FROM products");
+    // Fetch all products and related data in a single query
+    const productsQuery = `
+      SELECT
+        p.id,
+        p.manufacturer_name,
+        p.product_name,
+        p.price,
+        p.discounted_price,
+        p.image,
+        p.description,
+        p.stock_quantity,
+        p.to_be_delivered_date,
+        p.product_status,
+        pr.rating,
+        pc.campaign_text
+      FROM products p
+      LEFT JOIN product_reviews pr ON p.id = pr.product_id
+      LEFT JOIN product_campaigns pc ON p.id = pc.product_id;
+    `;
+
+    const productsRequest = await pool.query(productsQuery);
     const productsRows = productsRequest.rows;
 
-    // Create an array to hold all product data
-    const products = await Promise.all(
-      productsRows.map(async (item) => {
-        const productId = item.id;
+    // Organize the data into products
+    const productsMap = new Map();
 
-        // Fetch product variations, reviews, shipping information, related products, and campaigns for each product
-        const variationsQuery = `SELECT * FROM product_variations WHERE product_id = $1`;
-        const variationsRows = await pool.query(variationsQuery, [productId]);
-
-        const ratingPointQuery = `SELECT rating FROM product_reviews WHERE product_id = $1`;
-        const ratings = await pool.query(ratingPointQuery, [productId]);
-
-        const campaignsQuery = `SELECT campaign_text FROM product_campaigns WHERE product_id = $1`;
-        const campaignsRows = await pool.query(campaignsQuery, [productId]);
-
-        // Create the JSON response object for the current product
-        const productData = {
+    productsRows.forEach((item) => {
+      const productId = item.id;
+      if (!productsMap.has(productId)) {
+        productsMap.set(productId, {
           id: item.id,
           manufacturerName: item.manufacturer_name,
           productName: item.product_name,
@@ -289,18 +301,31 @@ app.get("/getProducts", async (req, res) => {
           stockQuantity: item.stock_quantity,
           toBeDeliveredDate: item.to_be_delivered_date,
           productStatus: item.product_status,
+          ratingsCount: 0,
+          starPoint: 0,
+          campaigns: [],
+        });
+      }
 
-          variations: variationsRows.rows,
-          ratingsCount: ratings.rows.length,
-          starPoint: calculateAverageRating(ratings.rows),
+      if (item.rating !== null) {
+        productsMap.get(productId).ratingsCount++;
+        productsMap.get(productId).starPoint += item.rating;
+      }
 
-          campaigns: campaignsRows.rows.map(
-            (campaign) => campaign.campaign_text
-          ),
-        };
-        return productData;
-      })
-    );
+      if (item.campaign_text !== null) {
+        productsMap.get(productId).campaigns.push(item.campaign_text);
+      }
+    });
+
+    // Convert the map of products to an array
+    const products = Array.from(productsMap.values());
+
+    // Calculate the average rating
+    products.forEach((product) => {
+      if (product.ratingsCount > 0) {
+        product.starPoint /= product.ratingsCount;
+      }
+    });
 
     res.json(products);
   } catch (err) {
