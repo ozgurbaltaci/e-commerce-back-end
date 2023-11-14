@@ -224,6 +224,7 @@ app.post("/createPayment", verifyToken, async (req, res) => {
 
         iyzipay.payment.create(request, function (err, result) {
           if (result.status === "success") {
+            console.log(result);
             res.status(200).send();
           } else {
             console.error("ödeme alınamadı", result, err);
@@ -353,6 +354,53 @@ app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/getCart/:userId", async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    // Fetch cart data based on userId
+    const cartQuery = `
+      SELECT
+        c.cart_id,
+        c.user_id,
+        c.product_id,
+        c.product_quantity,
+        c.price_on_add,
+        c.add_date,
+        p.manufacturer_name,
+        p.product_name,
+        p.price,
+        p.discounted_price,
+        p.image
+      FROM users_cart c
+      LEFT JOIN products p ON c.product_id = p.id
+      WHERE c.user_id = $1;
+    `;
+    const cartRequest = await pool.query(cartQuery, [userId]);
+    const cartRows = cartRequest.rows;
+
+    // Organize the data into cart items
+    const cartItems = cartRows.map((item) => ({
+      id: item.cart_id,
+      userId: item.user_id,
+      productId: item.product_id,
+      productQuantity: item.product_quantity,
+      priceOnAdd: item.price_on_add,
+      addDate: item.add_date,
+      manufacturerName: item.manufacturer_name,
+      productName: item.product_name,
+      price: item.price,
+      discountedPrice: item.discounted_price,
+      image: item.image,
+    }));
+
+    res.json(cartItems);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: " error" });
   }
 });
 
