@@ -266,7 +266,7 @@ app.get("/getProducts", async (req, res) => {
     const productsQuery = `
       SELECT
         p.id,
-        p.manufacturer_name,
+        p.manufacturer_id,
         p.product_name,
         p.price,
         p.discounted_price,
@@ -276,10 +276,12 @@ app.get("/getProducts", async (req, res) => {
         p.to_be_delivered_date,
         p.product_status,
         pr.rating,
-        pc.campaign_text
+        pc.campaign_text,
+        m.manufacturer_name
       FROM products p
       LEFT JOIN product_reviews pr ON p.id = pr.product_id
-      LEFT JOIN product_campaigns pc ON p.id = pc.product_id;
+      LEFT JOIN product_campaigns pc ON p.id = pc.product_id
+      LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id;
     `;
 
     const productsRequest = await pool.query(productsQuery);
@@ -293,7 +295,7 @@ app.get("/getProducts", async (req, res) => {
       if (!productsMap.has(productId)) {
         productsMap.set(productId, {
           id: item.id,
-          manufacturerName: item.manufacturer_name,
+          manufacturerId: item.manufacturer_id,
           productName: item.product_name,
           price: item.price,
           discountedPrice: item.discounted_price,
@@ -305,6 +307,7 @@ app.get("/getProducts", async (req, res) => {
           ratingsCount: 0,
           starPoint: 0,
           campaigns: [],
+          manufacturerName: item.manufacturer_name,
         });
       }
 
@@ -363,21 +366,23 @@ app.get("/getCart/:userId", async (req, res) => {
 
     // Fetch cart data based on userId
     const cartQuery = `
-      SELECT
-        c.cart_id,
-        c.user_id,
-        c.product_id,
-        c.product_quantity,
-        c.price_on_add,
-        c.add_date,
-        p.manufacturer_name,
-        p.product_name,
-        p.price,
-        p.discounted_price,
-        p.image
-      FROM users_cart c
-      LEFT JOIN products p ON c.product_id = p.id
-      WHERE c.user_id = $1;
+    SELECT
+    c.cart_id,
+    c.user_id,
+    c.product_id,
+    c.desired_amount,
+    c.price_on_add,
+    c.add_date,
+    p.product_name,
+    p.price,
+    p.discounted_price,
+    p.image,
+    m.manufacturer_id,
+    m.manufacturer_name
+  FROM users_cart c
+  LEFT JOIN products p ON c.product_id = p.id
+  LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
+  WHERE c.user_id = $1;
     `;
     const cartRequest = await pool.query(cartQuery, [userId]);
     const cartRows = cartRequest.rows;
@@ -387,10 +392,12 @@ app.get("/getCart/:userId", async (req, res) => {
       id: item.cart_id,
       userId: item.user_id,
       productId: item.product_id,
-      productQuantity: item.product_quantity,
+      desired_amount: item.desired_amount,
       priceOnAdd: item.price_on_add,
       addDate: item.add_date,
-      manufacturerName: item.manufacturer_name,
+      manufacturerId: item.manufacturer_id,
+      manufacturer_name: item.manufacturer_name,
+
       productName: item.product_name,
       price: item.price,
       discountedPrice: item.discounted_price,
