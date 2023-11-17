@@ -248,18 +248,6 @@ app.get("/getDeneme", async (req, res) => {
   }
 });
 
-function calculateAverageRating(reviews) {
-  if (reviews.length === 0) {
-    return 0; // Default to 0 if there are no reviews.
-  }
-
-  let sum = 0.0;
-  reviews.map((review, index) => {
-    sum = sum + parseFloat(review.rating);
-  });
-  return sum / reviews.length;
-}
-
 app.get("/getProducts", async (req, res) => {
   try {
     // Fetch all products and related data in a single query
@@ -287,7 +275,7 @@ app.get("/getProducts", async (req, res) => {
     const productsRequest = await pool.query(productsQuery);
     const productsRows = productsRequest.rows;
 
-    // Organize the data into products
+    // Modify the structure inside the productsMap to include an array for ratings
     const productsMap = new Map();
 
     productsRows.forEach((item) => {
@@ -304,16 +292,16 @@ app.get("/getProducts", async (req, res) => {
           stockQuantity: item.stock_quantity,
           toBeDeliveredDate: item.to_be_delivered_date,
           productStatus: item.product_status,
+          ratings: [], // Include an array to store ratings
           ratingsCount: 0,
-          starPoint: 0,
           campaigns: [],
           manufacturerName: item.manufacturer_name,
         });
       }
 
       if (item.rating !== null) {
+        productsMap.get(productId).ratings.push(item.rating);
         productsMap.get(productId).ratingsCount++;
-        productsMap.get(productId).starPoint += item.rating;
       }
 
       if (item.campaign_text !== null) {
@@ -324,13 +312,27 @@ app.get("/getProducts", async (req, res) => {
     // Convert the map of products to an array
     const products = Array.from(productsMap.values());
 
-    // Calculate the average rating
+    // Calculate the average rating using the calculateAverageRating function
     products.forEach((product) => {
-      if (product.ratingsCount > 0) {
-        product.starPoint /= product.ratingsCount;
+      if (product.ratings.length > 0) {
+        product.starPoint = calculateAverageRating(product.ratings);
       }
     });
 
+    // Add the calculateAverageRating function
+    function calculateAverageRating(reviews) {
+      if (reviews.length === 0) {
+        return 0; // Default to 0 if there are no reviews.
+      }
+
+      let sum = 0.0;
+      reviews.map((review) => {
+        sum = sum + parseFloat(review);
+      });
+      return sum / reviews.length;
+    }
+
+    // Send the response
     res.json(products);
   } catch (err) {
     console.error(err);
