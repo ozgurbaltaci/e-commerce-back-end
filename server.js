@@ -410,6 +410,26 @@ app.get("/getCart/:userId", async (req, res) => {
     res.status(500).json({ error: " error" });
   }
 });
+app.put("/updateDesiredAmount/:user_id/:productId", async (req, res) => {
+  const { user_id, productId } = req.params;
+  const { desiredAmount } = req.body;
+
+  try {
+    const updateQuery = `
+      UPDATE users_cart
+      SET desired_amount = $1
+      WHERE user_id = $2 AND product_id = $3
+    `;
+
+    // Use the pool to execute the SQL query
+    await pool.query(updateQuery, [desiredAmount, user_id, productId]);
+
+    res.status(200).json({ message: "Desired amount updated successfully." });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+    console.error(err.message);
+  }
+});
 
 app.get("/getFavoritesIdsOfUser/:user_id", async (req, res) => {
   try {
