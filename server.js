@@ -345,11 +345,12 @@ app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
     // Get the user_id from the URL parameter
     const user_id = req.params.user_id;
 
-    // Fetch favorite products for the specified user
+    // Fetch favorite products for the specified user with manufacturer names
     const favoritesQuery =
-      "SELECT p.image, p.price, p.discounted_price, p.manufacturer_name, p.product_name " +
+      "SELECT p.image, p.price, p.discounted_price, m.manufacturer_name, p.product_name " +
       "FROM users_favorites uf " +
       "JOIN products p ON uf.product_id = p.id " +
+      "JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id " +
       "WHERE uf.user_id = $1";
 
     const favoritesRequest = await pool.query(favoritesQuery, [user_id]);
