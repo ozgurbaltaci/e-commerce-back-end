@@ -285,8 +285,8 @@ app.get("/getProducts", async (req, res) => {
           id: item.id,
           manufacturerId: item.manufacturer_id,
           productName: item.product_name,
-          price: item.price,
-          discountedPrice: item.discounted_price,
+          price: +item.price,
+          discountedPrice: +item.discounted_price,
           image: item.image,
           description: item.description,
           stockQuantity: item.stock_quantity,
@@ -396,14 +396,14 @@ app.get("/getCart/:userId", async (req, res) => {
       userId: item.user_id,
       productId: item.product_id,
       desired_amount: item.desired_amount,
-      priceOnAdd: item.price_on_add,
+      priceOnAdd: +item.price_on_add,
       addDate: item.add_date,
       manufacturerId: item.manufacturer_id,
       manufacturer_name: item.manufacturer_name,
 
       productName: item.product_name,
-      price: item.price,
-      discountedPrice: item.discounted_price,
+      price: +item.price,
+      discountedPrice: +item.discounted_price,
       image: item.image,
     }));
 
