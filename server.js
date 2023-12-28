@@ -165,9 +165,11 @@ app.post("/login", async (req, res) => {
 
     res.status(200).json({
       user_id: user.rows[0].user_id,
-      userFullName: `${user.rows[0].user_name} ${user.rows[0].user_surname}`,
       accessToken: accessToken,
       user_name: user.rows[0].user_name,
+      user_surname: user.rows[0].user_surname,
+      user_phone: user.rows[0].user_phone,
+      user_mail: user.rows[0].user_mail,
     });
   } catch (err) {
     console.error(err.message);
@@ -187,8 +189,14 @@ app.post("/createPayment", verifyToken, async (req, res) => {
           secretKey: "sandbox-0bt2hNbgRkJwqPCMNITPpG5XBb7xzLnV",
           uri: "https://sandbox-api.iyzipay.com",
         });
-        const { price, paidPrice, paymentCard, basketItems, shippingAddress } =
-          req.body;
+        const {
+          price,
+          paidPrice,
+          paymentCard,
+          basketItems,
+          shippingAddress,
+          buyerInfo,
+        } = req.body;
 
         var request = {
           locale: Iyzipay.LOCALE.TR,
@@ -202,20 +210,19 @@ app.post("/createPayment", verifyToken, async (req, res) => {
           paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
           paymentCard: paymentCard,
           buyer: {
-            id: "BY789",
-            name: "John",
-            surname: "Doe",
-            gsmNumber: "+905350000000",
-            email: "email@email.com",
-            identityNumber: "74300864791",
-            lastLoginDate: "2015-10-05 12:43:35",
-            registrationDate: "2013-04-21 15:12:09",
-            registrationAddress:
-              "Nidakule Göztepe, Merdivenköy Mah. Bora Sok. No:1",
-            ip: "85.34.78.112",
-            city: "Istanbul",
+            id: buyerInfo.user_id,
+            name: buyerInfo.user_name,
+            surname: buyerInfo.user_surname,
+            gsmNumber: buyerInfo.user_phone,
+            email: buyerInfo.user_mail,
+            identityNumber: "11111111111",
+            lastLoginDate: "2113-04-21 15:12:09",
+            registrationDate: "2113-04-21 15:12:09",
+            registrationAddress: "-",
+            ip: "11.11.11.111",
+            city: "-",
             country: "Turkey",
-            zipCode: "34732",
+            zipCode: "11111",
           },
           shippingAddress: shippingAddress,
           billingAddress: shippingAddress,
