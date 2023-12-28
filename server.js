@@ -351,19 +351,90 @@ app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
   try {
     // Get the user_id from the URL parameter
     const user_id = req.params.user_id;
-
-    // Fetch favorite products for the specified user with manufacturer names
-    const favoritesQuery =
-      "SELECT p.image, p.price, p.discounted_price, m.manufacturer_name, p.product_name " +
-      "FROM users_favorites uf " +
-      "JOIN products p ON uf.product_id = p.id " +
-      "JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id " +
-      "WHERE uf.user_id = $1";
+    // Fetch favorite products for the specified user with additional data
+    const favoritesQuery = `
+SELECT
+  p.id,
+  p.manufacturer_id,
+  p.product_name,
+  p.price,
+  p.discounted_price,
+  p.image,
+  p.description,
+  p.stock_quantity,
+  p.to_be_delivered_date,
+  p.product_status,
+  pr.rating,
+  pc.campaign_text,
+  m.manufacturer_name
+FROM users_favorites uf
+JOIN products p ON uf.product_id = p.id
+LEFT JOIN product_reviews pr ON p.id = pr.product_id
+LEFT JOIN product_campaigns pc ON p.id = pc.product_id
+LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
+WHERE uf.user_id = $1;
+`;
 
     const favoritesRequest = await pool.query(favoritesQuery, [user_id]);
-    const favoriteProducts = favoritesRequest.rows;
+    const favoriteProductsRows = favoritesRequest.rows;
 
-    res.json(favoriteProducts);
+    const favoriteProductsMap = new Map();
+
+    favoriteProductsRows.forEach((item) => {
+      const productId = item.id;
+      if (!favoriteProductsMap.has(productId)) {
+        favoriteProductsMap.set(productId, {
+          id: item.id,
+          manufacturerId: item.manufacturer_id,
+          productName: item.product_name,
+          price: +item.price,
+          discountedPrice: +item.discounted_price,
+          image: item.image,
+          description: item.description,
+          stockQuantity: item.stock_quantity,
+          toBeDeliveredDate: item.to_be_delivered_date,
+          productStatus: item.product_status,
+          ratings: [], // Include an array to store ratings
+          ratingsCount: 0,
+          campaigns: [],
+          manufacturerName: item.manufacturer_name,
+        });
+      }
+      if (item.rating !== null) {
+        favoriteProductsMap.get(productId).ratings.push(item.rating);
+        favoriteProductsMap.get(productId).ratingsCount++;
+      }
+
+      if (item.campaign_text !== null) {
+        favoriteProductsMap.get(productId).campaigns.push(item.campaign_text);
+      }
+    });
+
+    // Convert the map of products to an array
+    const products = Array.from(favoriteProductsMap.values());
+
+    // Calculate the average rating using the calculateAverageRating function
+    products.forEach((product) => {
+      if (product.ratings.length > 0) {
+        product.starPoint = calculateAverageRating(product.ratings);
+      }
+    });
+
+    // Add the calculateAverageRating function
+    function calculateAverageRating(reviews) {
+      if (reviews.length === 0) {
+        return 0; // Default to 0 if there are no reviews.
+      }
+
+      let sum = 0.0;
+      reviews.map((review) => {
+        sum = sum + parseFloat(review);
+      });
+      return sum / reviews.length;
+    }
+
+    // Send the response
+    res.json(products);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -376,24 +447,24 @@ app.get("/getCart/:userId", async (req, res) => {
 
     // Fetch cart data based on userId
     const cartQuery = `
-    SELECT
-    c.cart_id,
-    c.user_id,
-    c.product_id,
-    c.desired_amount,
-    c.price_on_add,
-    c.add_date,
-    p.product_name,
-    p.price,
-    p.discounted_price,
-    p.image,
-    m.manufacturer_id,
-    m.manufacturer_name
-  FROM users_cart c
-  LEFT JOIN products p ON c.product_id = p.id
-  LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
-  WHERE c.user_id = $1;
-    `;
+SELECT
+c.cart_id,
+c.user_id,
+c.product_id,
+c.desired_amount,
+c.price_on_add,
+c.add_date,
+p.product_name,
+p.price,
+p.discounted_price,
+p.image,
+m.manufacturer_id,
+m.manufacturer_name
+FROM users_cart c
+LEFT JOIN products p ON c.product_id = p.id
+LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
+WHERE c.user_id = $1;
+`;
     const cartRequest = await pool.query(cartQuery, [userId]);
     const cartRows = cartRequest.rows;
 
@@ -426,10 +497,10 @@ app.put("/updateDesiredAmount/:user_id/:productId", async (req, res) => {
 
   try {
     const updateQuery = `
-      UPDATE users_cart
-      SET desired_amount = $1
-      WHERE user_id = $2 AND product_id = $3
-    `;
+UPDATE users_cart
+SET desired_amount = $1
+WHERE user_id = $2 AND product_id = $3
+`;
 
     // Use the pool to execute the SQL query
     await pool.query(updateQuery, [desiredAmount, user_id, productId]);
@@ -462,10 +533,9 @@ app.get("/getFavoritesIdsOfUser/:user_id", async (req, res) => {
   }
 });
 
-app.post("/addToFavorite/:user_id", async (req, res) => {
+app.post("/addToFavorite/:user_id/:product_id", async (req, res) => {
   const user_id = req.params.user_id;
-
-  const { product_id } = req.body;
+  const product_id = req.params.product_id;
 
   try {
     const request = await pool.query(
