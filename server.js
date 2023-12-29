@@ -286,9 +286,9 @@ app.get("/getProducts", async (req, res) => {
     const productsMap = new Map();
 
     productsRows.forEach((item) => {
-      const productId = item.id;
-      if (!productsMap.has(productId)) {
-        productsMap.set(productId, {
+      const id = item.id;
+      if (!productsMap.has(id)) {
+        productsMap.set(id, {
           id: item.id,
           manufacturerId: item.manufacturer_id,
           productName: item.product_name,
@@ -307,12 +307,12 @@ app.get("/getProducts", async (req, res) => {
       }
 
       if (item.rating !== null) {
-        productsMap.get(productId).ratings.push(item.rating);
-        productsMap.get(productId).ratingsCount++;
+        productsMap.get(id).ratings.push(item.rating);
+        productsMap.get(id).ratingsCount++;
       }
 
       if (item.campaign_text !== null) {
-        productsMap.get(productId).campaigns.push(item.campaign_text);
+        productsMap.get(id).campaigns.push(item.campaign_text);
       }
     });
 
@@ -381,9 +381,9 @@ WHERE uf.user_id = $1;
     const favoriteProductsMap = new Map();
 
     favoriteProductsRows.forEach((item) => {
-      const productId = item.id;
-      if (!favoriteProductsMap.has(productId)) {
-        favoriteProductsMap.set(productId, {
+      const id = item.id;
+      if (!favoriteProductsMap.has(id)) {
+        favoriteProductsMap.set(id, {
           id: item.id,
           manufacturerId: item.manufacturer_id,
           productName: item.product_name,
@@ -401,12 +401,12 @@ WHERE uf.user_id = $1;
         });
       }
       if (item.rating !== null) {
-        favoriteProductsMap.get(productId).ratings.push(item.rating);
-        favoriteProductsMap.get(productId).ratingsCount++;
+        favoriteProductsMap.get(id).ratings.push(item.rating);
+        favoriteProductsMap.get(id).ratingsCount++;
       }
 
       if (item.campaign_text !== null) {
-        favoriteProductsMap.get(productId).campaigns.push(item.campaign_text);
+        favoriteProductsMap.get(id).campaigns.push(item.campaign_text);
       }
     });
 
@@ -470,9 +470,9 @@ WHERE c.user_id = $1;
 
     // Organize the data into cart items
     const cartItems = cartRows.map((item) => ({
-      id: item.cart_id,
+      cart_id: item.cart_id,
       userId: item.user_id,
-      productId: item.product_id,
+      id: item.product_id,
       desired_amount: item.desired_amount,
       priceOnAdd: +item.price_on_add,
       addDate: item.add_date,
@@ -491,20 +491,27 @@ WHERE c.user_id = $1;
     res.status(500).json({ error: " error" });
   }
 });
-app.put("/updateDesiredAmount/:user_id/:productId", async (req, res) => {
-  const { user_id, productId } = req.params;
+app.put("/updateDesiredAmount/:user_id/:id", async (req, res) => {
+  const { user_id, id } = req.params;
   const { desiredAmount } = req.body;
 
   try {
     const updateQuery = `
-UPDATE users_cart
-SET desired_amount = $1
-WHERE user_id = $2 AND product_id = $3
-`;
+      UPDATE users_cart
+      SET desired_amount = $1
+      WHERE user_id = $2 AND product_id = $3
+    `;
 
     // Use the pool to execute the SQL query
-    await pool.query(updateQuery, [desiredAmount, user_id, productId]);
+    const result = await pool.query(updateQuery, [desiredAmount, user_id, id]);
 
+    // Check if any rows were affected by the update
+    if (result.rowCount === 0) {
+      // No rows were affected, meaning the product is not in the cart
+      return res.status(404).json({ error: "Product not found in the cart." });
+    }
+
+    // Rows were affected, so the update was successful
     res.status(200).json({ message: "Desired amount updated successfully." });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
@@ -564,6 +571,29 @@ app.delete("/removeFromFavorite/:user_id/:product_id", async (req, res) => {
   } catch (err) {
     res.status(500).send();
     console.error(err.message);
+  }
+});
+app.get("/getCartItemsIdsAndAmountsOfUser/:user_id", async (req, res) => {
+  try {
+    // Get the user_id from the URL parameter
+    const user_id = req.params.user_id;
+
+    // Fetch favorite products for the specified user
+    const idsAndAmountsQuery =
+      "SELECT product_id, desired_amount FROM users_cart WHERE user_id = $1 ";
+
+    const idsAndAmountsRequest = await pool.query(idsAndAmountsQuery, [
+      user_id,
+    ]);
+    const idsAndAmounts = idsAndAmountsRequest.rows.map((row) => ({
+      product_id: row.product_id,
+      desired_amount: row.desired_amount,
+    }));
+
+    res.json(idsAndAmounts);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
