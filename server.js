@@ -573,29 +573,6 @@ app.delete("/removeFromFavorite/:user_id/:product_id", async (req, res) => {
     console.error(err.message);
   }
 });
-app.get("/getCartItemsIdsAndAmountsOfUser/:user_id", async (req, res) => {
-  try {
-    // Get the user_id from the URL parameter
-    const user_id = req.params.user_id;
-
-    // Fetch favorite products for the specified user
-    const idsAndAmountsQuery =
-      "SELECT product_id, desired_amount FROM users_cart WHERE user_id = $1 ";
-
-    const idsAndAmountsRequest = await pool.query(idsAndAmountsQuery, [
-      user_id,
-    ]);
-    const idsAndAmounts = idsAndAmountsRequest.rows.map((row) => ({
-      product_id: row.product_id,
-      desired_amount: row.desired_amount,
-    }));
-
-    res.json(idsAndAmounts);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
 
 app.listen(3002, () => {
   console.log("Server has started on port 3002");
