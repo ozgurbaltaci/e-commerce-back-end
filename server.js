@@ -540,27 +540,23 @@ app.get("/getFavoritesIdsOfUser/:user_id", async (req, res) => {
   }
 });
 
-app.post(
-  "/addToCart/:user_id/:product_id/:desired_amount/:price_on_add",
-  async (req, res) => {
-    const user_id = req.params.user_id;
-    const product_id = req.params.product_id;
-    const desired_amount = req.params.desired_amount;
-    const price_on_add = req.params.price_on_add;
+app.post("/addToCart/:user_id/:product_id/:price_on_add", async (req, res) => {
+  const user_id = req.params.user_id;
+  const product_id = req.params.product_id;
+  const price_on_add = req.params.price_on_add;
 
-    try {
-      const request = await pool.query(
-        "INSERT INTO users_cart (id, user_id, product_id, desired_amount, price_on_add, add_date) VALUES (default, $1, $2, $3, $4, CURRENT_TIMESTAMP)",
-        [user_id, product_id, desired_amount, price_on_add]
-      );
+  try {
+    const request = await pool.query(
+      "INSERT INTO users_cart (cart_id, user_id, product_id, desired_amount, price_on_add, add_date) VALUES (default, $1, $2, 1, $3, CURRENT_TIMESTAMP)",
+      [user_id, product_id, price_on_add]
+    );
 
-      res.status(201).send();
-    } catch (err) {
-      res.status(500).send();
-      console.error(err.message);
-    }
+    res.status(201).send();
+  } catch (err) {
+    res.status(500).send();
+    console.error(err.message);
   }
-);
+});
 
 app.post("/addToFavorite/:user_id/:product_id", async (req, res) => {
   const user_id = req.params.user_id;
