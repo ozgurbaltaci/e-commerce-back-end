@@ -289,7 +289,7 @@ app.get("/getProducts", async (req, res) => {
       const id = item.id;
       if (!productsMap.has(id)) {
         productsMap.set(id, {
-          id: item.id,
+          product_id: item.id,
           manufacturerId: item.manufacturer_id,
           productName: item.product_name,
           price: +item.price,
@@ -384,7 +384,7 @@ WHERE uf.user_id = $1;
       const id = item.id;
       if (!favoriteProductsMap.has(id)) {
         favoriteProductsMap.set(id, {
-          id: item.id,
+          product_id: item.id,
           manufacturerId: item.manufacturer_id,
           productName: item.product_name,
           price: +item.price,
@@ -471,17 +471,17 @@ WHERE c.user_id = $1;
     // Organize the data into cart items
     const cartItems = cartRows.map((item) => ({
       cart_id: item.cart_id,
-      userId: item.user_id,
-      id: item.product_id,
+      product_id: item.product_id,
+      user_id: item.user_id,
       desired_amount: item.desired_amount,
-      priceOnAdd: +item.price_on_add,
-      addDate: item.add_date,
-      manufacturerId: item.manufacturer_id,
+      price_on_add: +item.price_on_add,
+      add_date: item.add_date,
+      manufacturer_id: item.manufacturer_id,
       manufacturer_name: item.manufacturer_name,
 
-      productName: item.product_name,
+      product_name: item.product_name,
       price: +item.price,
-      discountedPrice: +item.discounted_price,
+      discounted_price: +item.discounted_price,
       image: item.image,
     }));
 
@@ -493,7 +493,7 @@ WHERE c.user_id = $1;
 });
 app.put("/updateDesiredAmount/:user_id/:id", async (req, res) => {
   const { user_id, id } = req.params;
-  const { desiredAmount } = req.body;
+  const { desired_amount } = req.body;
 
   try {
     const updateQuery = `
@@ -503,7 +503,7 @@ app.put("/updateDesiredAmount/:user_id/:id", async (req, res) => {
     `;
 
     // Use the pool to execute the SQL query
-    const result = await pool.query(updateQuery, [desiredAmount, user_id, id]);
+    const result = await pool.query(updateQuery, [desired_amount, user_id, id]);
 
     // Check if any rows were affected by the update
     if (result.rowCount === 0) {
@@ -547,14 +547,60 @@ app.post("/addToCart/:user_id/:product_id/:price_on_add", async (req, res) => {
 
   try {
     const request = await pool.query(
-      "INSERT INTO users_cart (cart_id, user_id, product_id, desired_amount, price_on_add, add_date) VALUES (default, $1, $2, 1, $3, CURRENT_TIMESTAMP)",
+      "INSERT INTO users_cart (cart_id, user_id, product_id, desired_amount, price_on_add, add_date) VALUES (default, $1, $2, 1, $3, CURRENT_TIMESTAMP) RETURNING *",
       [user_id, product_id, price_on_add]
     );
 
-    res.status(201).send();
+    const insertedRow = request.rows[0]; // Assuming only one row is returned
+
+    res.status(201).json(insertedRow);
   } catch (err) {
     res.status(500).send();
     console.error(err.message);
+  }
+});
+
+const generateOrderId = () => {
+  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let orderId = "";
+  for (let i = 0; i < 6; i++) {
+    const randomIndex = Math.floor(Math.random() * characters.length);
+    orderId += characters.charAt(randomIndex);
+  }
+  return orderId;
+};
+
+const isOrderIdUnique = async (orderId) => {
+  const result = await pool.query(
+    "SELECT COUNT(*) FROM orders_table WHERE order_id = $1",
+    [orderId]
+  );
+  return result.rows[0].count === 0;
+};
+
+app.post("/saveOrder/:user_id", async (req, res) => {
+  try {
+    const userId = req.params.user_id;
+    const { selectedProducts } = req.body;
+    const order_id = generateOrderId();
+
+    // Loop through each selected product and save it to the orders_table
+    const promises = selectedProducts.map(async (product) => {
+      const { product_id, desired_amount, currPrice } = product;
+
+      // Replace the following with your actual database query to insert into orders_table
+      await pool.query(
+        "INSERT INTO orders_table (order_id, user_id, product_id, desired_amount, price_on_add) VALUES ($1, $2, $3, $4, $5)",
+        [order_id, userId, product_id, desired_amount, currPrice]
+      );
+    });
+
+    await Promise.all(promises);
+
+    res.status(200).json({ message: "Orders saved successfully." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
   }
 });
 
@@ -582,6 +628,23 @@ app.delete("/removeFromFavorite/:user_id/:product_id", async (req, res) => {
   try {
     const request = await pool.query(
       "DELETE FROM users_favorites WHERE user_id = $1 AND product_id = $2",
+      [user_id, product_id]
+    );
+
+    res.status(200).send();
+  } catch (err) {
+    res.status(500).send();
+    console.error(err.message);
+  }
+});
+
+app.delete("/removeFromCart/:user_id/:product_id", async (req, res) => {
+  const user_id = req.params.user_id;
+  const product_id = req.params.product_id;
+
+  try {
+    const request = await pool.query(
+      "DELETE FROM users_cart WHERE user_id = $1 AND product_id = $2",
       [user_id, product_id]
     );
 
