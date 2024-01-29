@@ -590,7 +590,7 @@ app.post("/saveOrder/:user_id", async (req, res) => {
 
       // Replace the following with your actual database query to insert into orders_table
       await pool.query(
-        "INSERT INTO orders_table (order_id, user_id, product_id, desired_amount, price_on_add) VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO orders_table (order_id, user_id, product_id, desired_amount, price_on_add, order_status_id, order_date) VALUES ($1, $2, $3, $4, $5, 1, CURRENT_TIMESTAMP)",
         [order_id, userId, product_id, desired_amount, currPrice]
       );
     });
@@ -598,6 +598,61 @@ app.post("/saveOrder/:user_id", async (req, res) => {
     await Promise.all(promises);
 
     res.status(200).json({ message: "Orders saved successfully." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+app.get("/getOrders/:user_id", async (req, res) => {
+  try {
+    const userId = req.params.user_id;
+
+    // Replace the following with your actual database query to retrieve orders with product information
+    const result = await pool.query(
+      "SELECT o.order_id, o.desired_amount, o.price_on_add, o.order_status_id, o.order_date, os.order_status, p.product_name, p.description, p.image, p.manufacturer_id, m.manufacturer_name FROM orders_table o LEFT JOIN products p ON o.product_id = p.id LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id LEFT JOIN order_status os ON o.order_status_id = os.order_status_id WHERE o.user_id = $1 ORDER BY o.order_id;",
+      [userId]
+    );
+
+    const ordersWithProducts = [];
+    let currentOrder = null;
+
+    // Process the query result to create the desired response structure
+    result.rows.forEach((row) => {
+      // Check if the order has changed
+      if (!currentOrder || currentOrder.order_id !== row.order_id) {
+        // Create a new order object
+        currentOrder = {
+          order_id: row.order_id,
+          order_status_id: row.order_status_id,
+          order_date: row.order_date.toLocaleDateString("en-US", {
+            timeZone: "Europe/Istanbul",
+          }),
+          order_status: row.order_status,
+          products: [],
+          total_price: 0, // Initialize total_price for the order
+        };
+        ordersWithProducts.push(currentOrder);
+      }
+
+      // Calculate the total price for the current product and add it to the order's total_price
+      const totalPriceForProduct = row.desired_amount * row.price_on_add;
+      currentOrder.total_price += totalPriceForProduct;
+
+      // Add the product details to the current order's products array
+      currentOrder.products.push({
+        product_name: row.product_name,
+        description: row.description,
+        image: row.image,
+        manufacturer_id: row.manufacturer_id,
+        manufacturer_name: row.manufacturer_name,
+        desired_amount: row.desired_amount,
+        price_on_add: row.price_on_add,
+        total_price_for_product: totalPriceForProduct,
+      });
+    });
+
+    res.status(200).json({ orders: ordersWithProducts });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error." });
