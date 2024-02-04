@@ -393,7 +393,7 @@ app.get(
       p.sub_category_id,
       pr.rating,
       pc.campaign_text,
-      m.manufacturer_name,
+      m.manufacturer_name
     
     FROM products p
     LEFT JOIN product_reviews pr ON p.id = pr.product_id
