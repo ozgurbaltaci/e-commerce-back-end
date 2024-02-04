@@ -357,6 +357,20 @@ app.get("/getCategories", async (req, res) => {
   }
 });
 
+app.get("/getSubCategoriesOfCurrentCategory/:category_id", async (req, res) => {
+  try {
+    const category_id = req.params.category_id;
+    const sub_categories_query =
+      "SELECT sub_category_id, sub_category_name, sub_category_img FROM sub_categories WHERE category_id = $1";
+    const getSubCategoriesRequest = await pool.query(sub_categories_query, [
+      category_id,
+    ]);
+    res.json(getSubCategoriesRequest.rows);
+  } catch (err) {
+    console.log(err);
+  }
+});
+
 app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
   try {
     // Get the user_id from the URL parameter
