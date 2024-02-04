@@ -371,6 +371,109 @@ app.get("/getSubCategoriesOfCurrentCategory/:category_id", async (req, res) => {
   }
 });
 
+app.get(
+  "/getProductsOfCurrentSubCategory/:sub_category_id",
+  async (req, res) => {
+    const sub_category_id = req.params.sub_category_id;
+    try {
+      // Fetch all products and related data in a single query
+      const productsQuery = `
+      SELECT
+      p.id,
+      p.manufacturer_id,
+      p.product_name,
+      p.price,
+      p.discounted_price,
+      p.image,
+      p.description,
+      p.stock_quantity,
+      p.to_be_delivered_date,
+      p.product_status,
+      p.category_id,
+      p.sub_category_id,
+      pr.rating,
+      pc.campaign_text,
+      m.manufacturer_name,
+    
+    FROM products p
+    LEFT JOIN product_reviews pr ON p.id = pr.product_id
+    LEFT JOIN product_campaigns pc ON p.id = pc.product_id
+    LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
+    LEFT JOIN categories c ON p.category_id = c.category_id
+    LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id WHERE p.sub_category_id = $1;
+    `;
+
+      const productsRequest = await pool.query(productsQuery, [
+        sub_category_id,
+      ]);
+      const productsRows = productsRequest.rows;
+
+      // Modify the structure inside the productsMap to include an array for ratings
+      const productsMap = new Map();
+
+      productsRows.forEach((item) => {
+        const id = item.id;
+        if (!productsMap.has(id)) {
+          productsMap.set(id, {
+            product_id: item.id,
+            manufacturerId: item.manufacturer_id,
+            productName: item.product_name,
+            price: +item.price,
+            discountedPrice: +item.discounted_price,
+            image: item.image,
+            description: item.description,
+            stockQuantity: item.stock_quantity,
+            toBeDeliveredDate: item.to_be_delivered_date,
+            productStatus: item.product_status,
+            ratings: [], // Include an array to store ratings
+            ratingsCount: 0,
+            campaigns: [],
+            manufacturerName: item.manufacturer_name,
+          });
+        }
+
+        if (item.rating !== null) {
+          productsMap.get(id).ratings.push(item.rating);
+          productsMap.get(id).ratingsCount++;
+        }
+
+        if (item.campaign_text !== null) {
+          productsMap.get(id).campaigns.push(item.campaign_text);
+        }
+      });
+
+      // Convert the map of products to an array
+      const products = Array.from(productsMap.values());
+
+      // Calculate the average rating using the calculateAverageRating function
+      products.forEach((product) => {
+        if (product.ratings.length > 0) {
+          product.starPoint = calculateAverageRating(product.ratings);
+        }
+      });
+
+      // Add the calculateAverageRating function
+      function calculateAverageRating(reviews) {
+        if (reviews.length === 0) {
+          return 0; // Default to 0 if there are no reviews.
+        }
+
+        let sum = 0.0;
+        reviews.map((review) => {
+          sum = sum + parseFloat(review);
+        });
+        return sum / reviews.length;
+      }
+
+      // Send the response
+      res.json(products);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
 app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
   try {
     // Get the user_id from the URL parameter
