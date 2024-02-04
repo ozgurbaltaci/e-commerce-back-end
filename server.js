@@ -347,6 +347,16 @@ app.get("/getProducts", async (req, res) => {
   }
 });
 
+app.get("/getCategories", async (req, res) => {
+  try {
+    const cateogriesQuery = "SELECT * FROM categories";
+    const getCategoriesRequest = await pool.query(cateogriesQuery);
+    res.json(getCategoriesRequest.rows);
+  } catch (err) {
+    console.log(err);
+  }
+});
+
 app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
   try {
     // Get the user_id from the URL parameter
