@@ -270,6 +270,8 @@ app.get("/getProducts", async (req, res) => {
         p.stock_quantity,
         p.to_be_delivered_date,
         p.product_status,
+        p.category_id,
+        p.sub_category_id,
         pr.rating,
         pc.campaign_text,
         m.manufacturer_name
@@ -292,8 +294,9 @@ app.get("/getProducts", async (req, res) => {
           product_id: item.id,
           manufacturerId: item.manufacturer_id,
           productName: item.product_name,
-          price: +item.price,
-          discountedPrice: +item.discounted_price,
+          price: item.price !== null ? +item.price : null,
+          discountedPrice:
+            item.discounted_price !== null ? +item.discounted_price : null,
           image: item.image,
           description: item.description,
           stockQuantity: item.stock_quantity,
@@ -303,6 +306,8 @@ app.get("/getProducts", async (req, res) => {
           ratingsCount: 0,
           campaigns: [],
           manufacturerName: item.manufacturer_name,
+          category_id: item.category_id,
+          sub_category_id: item.sub_category_id,
         });
       }
 
@@ -361,7 +366,7 @@ app.get("/getSubCategoriesOfCurrentCategory/:category_id", async (req, res) => {
   try {
     const category_id = req.params.category_id;
     const sub_categories_query =
-      "SELECT sub_category_id, sub_category_name, sub_category_img FROM sub_categories WHERE category_id = $1";
+      "SELECT category_id, sub_category_id, sub_category_name, sub_category_img FROM sub_categories WHERE category_id = $1";
     const getSubCategoriesRequest = await pool.query(sub_categories_query, [
       category_id,
     ]);
@@ -391,6 +396,8 @@ app.get(
       p.product_status,
       p.category_id,
       p.sub_category_id,
+      c.category_name,
+      sc.sub_category_name,
       pr.rating,
       pc.campaign_text,
       m.manufacturer_name
@@ -418,10 +425,13 @@ app.get(
             product_id: item.id,
             manufacturerId: item.manufacturer_id,
             productName: item.product_name,
-            price: +item.price,
-            discountedPrice: +item.discounted_price,
+            price: item.price !== null ? +item.price : null,
+            discountedPrice:
+              item.discounted_price !== null ? +item.discounted_price : null,
             image: item.image,
             description: item.description,
+            category_name: item.category_name,
+            sub_category_name: item.sub_category_name,
             stockQuantity: item.stock_quantity,
             toBeDeliveredDate: item.to_be_delivered_date,
             productStatus: item.product_status,
@@ -429,6 +439,8 @@ app.get(
             ratingsCount: 0,
             campaigns: [],
             manufacturerName: item.manufacturer_name,
+            category_id: item.category_id,
+            sub_category_id: item.sub_category_id,
           });
         }
 
@@ -474,6 +486,76 @@ app.get(
   }
 );
 
+app.get("/getProductDetails/:product_id", async (req, res) => {
+  const product_id = req.params.product_id;
+  try {
+    const productsQuery = `
+      SELECT
+        p.id,
+        p.manufacturer_id,
+        p.product_name,
+        p.price,
+        p.discounted_price,
+        p.image,
+        p.description,
+        p.stock_quantity,
+        p.to_be_delivered_date,
+        p.product_status,
+        p.category_id,
+        p.sub_category_id,
+        c.category_name,
+        sc.sub_category_name,
+        pr.rating,
+        pc.campaign_text,
+        m.manufacturer_name
+      FROM products p
+      LEFT JOIN product_reviews pr ON p.id = pr.product_id
+      LEFT JOIN product_campaigns pc ON p.id = pc.product_id
+      LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
+      LEFT JOIN categories c ON p.category_id = c.category_id
+      LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id
+      WHERE p.id = $1;
+    `;
+
+    const productDetailsRequest = await pool.query(productsQuery, [product_id]);
+    const productWithDetails = productDetailsRequest.rows[0];
+
+    // Initialize ratings and campaigns for the single product
+    productWithDetails.ratings = [];
+    productWithDetails.campaigns = [];
+
+    // Push rating and campaign text to the product object
+    if (productWithDetails.rating !== null) {
+      productWithDetails.ratings.push(productWithDetails.rating);
+    }
+
+    if (productWithDetails.campaign_text !== null) {
+      productWithDetails.campaigns.push(productWithDetails.campaign_text);
+    }
+
+    // Calculate average rating
+    if (productWithDetails.ratings.length > 0) {
+      productWithDetails.starPoint = calculateAverageRating(
+        productWithDetails.ratings
+      );
+    } else {
+      productWithDetails.starPoint = 0; // Default to 0 if there are no reviews.
+    }
+
+    // Send the response
+    res.json(productWithDetails);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Function to calculate average rating
+function calculateAverageRating(reviews) {
+  const sum = reviews.reduce((total, review) => total + parseFloat(review), 0);
+  return sum / reviews.length;
+}
+
 app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
   try {
     // Get the user_id from the URL parameter
@@ -514,8 +596,9 @@ WHERE uf.user_id = $1;
           product_id: item.id,
           manufacturerId: item.manufacturer_id,
           productName: item.product_name,
-          price: +item.price,
-          discountedPrice: +item.discounted_price,
+          price: item.price !== null ? +item.price : null,
+          discountedPrice:
+            item.discounted_price !== null ? +item.discounted_price : null,
           image: item.image,
           description: item.description,
           stockQuantity: item.stock_quantity,
@@ -601,14 +684,15 @@ WHERE c.user_id = $1;
       product_id: item.product_id,
       user_id: item.user_id,
       desired_amount: item.desired_amount,
-      price_on_add: +item.price_on_add,
+      price_on_add: item.price_on_add !== null ? +item.price_on_add : null,
       add_date: item.add_date,
       manufacturer_id: item.manufacturer_id,
       manufacturer_name: item.manufacturer_name,
 
       product_name: item.product_name,
-      price: +item.price,
-      discounted_price: +item.discounted_price,
+      price: item.price !== null ? +item.price : null,
+      discounted_price:
+        item.discounted_price !== null ? +item.discounted_price : null,
       image: item.image,
     }));
 
