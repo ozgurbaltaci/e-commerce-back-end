@@ -259,26 +259,38 @@ app.get("/getProducts", async (req, res) => {
   try {
     // Fetch all products and related data in a single query
     const productsQuery = `
-      SELECT
-        p.id,
-        p.manufacturer_id,
-        p.product_name,
-        p.price,
-        p.discounted_price,
-        p.image,
-        p.description,
-        p.stock_quantity,
-        p.to_be_delivered_date,
-        p.product_status,
-        p.category_id,
-        p.sub_category_id,
-        pr.rating,
-        pc.campaign_text,
-        m.manufacturer_name
-      FROM products p
-      LEFT JOIN product_reviews pr ON p.id = pr.product_id
-      LEFT JOIN product_campaigns pc ON p.id = pc.product_id
-      LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id;
+    SELECT
+    p.id,
+    p.manufacturer_id,
+    p.product_name,
+    p.price,
+    p.discounted_price,
+    p.image,
+    p.description,
+    p.stock_quantity,
+    p.to_be_delivered_date,
+    p.product_status,
+    p.category_id,
+    p.sub_category_id,
+    p.star_point,
+    COUNT(pr.rating) AS ratings_count,
+    MAX(pr.rating) AS max_rating,
+    pc.campaign_text,
+    m.manufacturer_name
+FROM 
+    products p
+LEFT JOIN 
+    product_reviews pr ON p.id = pr.product_id
+LEFT JOIN 
+    product_campaigns pc ON p.id = pc.product_id
+LEFT JOIN 
+    manufacturers m ON p.manufacturer_id = m.manufacturer_id
+GROUP BY 
+    p.id, 
+    m.manufacturer_id, 
+    pc.campaign_text, 
+    m.manufacturer_name;
+
     `;
 
     const productsRequest = await pool.query(productsQuery);
@@ -303,17 +315,13 @@ app.get("/getProducts", async (req, res) => {
           toBeDeliveredDate: item.to_be_delivered_date,
           productStatus: item.product_status,
           ratings: [], // Include an array to store ratings
-          ratingsCount: 0,
+          ratingsCount: item.ratings_count,
           campaigns: [],
+          starPoint: item.star_point,
           manufacturerName: item.manufacturer_name,
           category_id: item.category_id,
           sub_category_id: item.sub_category_id,
         });
-      }
-
-      if (item.rating !== null) {
-        productsMap.get(id).ratings.push(item.rating);
-        productsMap.get(id).ratingsCount++;
       }
 
       if (item.campaign_text !== null) {
@@ -323,26 +331,6 @@ app.get("/getProducts", async (req, res) => {
 
     // Convert the map of products to an array
     const products = Array.from(productsMap.values());
-
-    // Calculate the average rating using the calculateAverageRating function
-    products.forEach((product) => {
-      if (product.ratings.length > 0) {
-        product.starPoint = calculateAverageRating(product.ratings);
-      }
-    });
-
-    // Add the calculateAverageRating function
-    function calculateAverageRating(reviews) {
-      if (reviews.length === 0) {
-        return 0; // Default to 0 if there are no reviews.
-      }
-
-      let sum = 0.0;
-      reviews.map((review) => {
-        sum = sum + parseFloat(review);
-      });
-      return sum / reviews.length;
-    }
 
     // Send the response
     res.json(products);
@@ -490,31 +478,51 @@ app.get("/getProductDetails/:product_id", async (req, res) => {
   const product_id = req.params.product_id;
   try {
     const productsQuery = `
-      SELECT
-        p.id,
-        p.manufacturer_id,
-        p.product_name,
-        p.price,
-        p.discounted_price,
-        p.image,
-        p.description,
-        p.stock_quantity,
-        p.to_be_delivered_date,
-        p.product_status,
-        p.category_id,
-        p.sub_category_id,
-        c.category_name,
-        sc.sub_category_name,
-        pr.rating,
-        pc.campaign_text,
-        m.manufacturer_name
-      FROM products p
-      LEFT JOIN product_reviews pr ON p.id = pr.product_id
-      LEFT JOIN product_campaigns pc ON p.id = pc.product_id
-      LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
-      LEFT JOIN categories c ON p.category_id = c.category_id
-      LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id
-      WHERE p.id = $1;
+    SELECT
+    p.id,
+    p.manufacturer_id,
+    p.product_name,
+    p.price,
+    p.discounted_price,
+    p.image,
+    p.description,
+    p.stock_quantity,
+    p.to_be_delivered_date,
+    p.product_status,
+    p.category_id,
+    p.sub_category_id,
+    c.category_name,
+    sc.sub_category_name,
+    COUNT(pr.product_id) AS ratings_count,
+    pr.rating,
+    pc.campaign_text,
+    m.manufacturer_name
+FROM products p
+LEFT JOIN product_reviews pr ON p.id = pr.product_id
+LEFT JOIN product_campaigns pc ON p.id = pc.product_id
+LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
+LEFT JOIN categories c ON p.category_id = c.category_id
+LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id
+WHERE p.id = $1
+GROUP BY
+    p.id,
+    p.manufacturer_id,
+    p.product_name,
+    p.price,
+    p.discounted_price,
+    p.image,
+    p.description,
+    p.stock_quantity,
+    p.to_be_delivered_date,
+    p.product_status,
+    p.category_id,
+    p.sub_category_id,
+    c.category_name,
+    sc.sub_category_name,
+    pr.rating,
+    pc.campaign_text,
+    m.manufacturer_name;
+
     `;
 
     const productDetailsRequest = await pool.query(productsQuery, [product_id]);
@@ -524,22 +532,8 @@ app.get("/getProductDetails/:product_id", async (req, res) => {
     productWithDetails.ratings = [];
     productWithDetails.campaigns = [];
 
-    // Push rating and campaign text to the product object
-    if (productWithDetails.rating !== null) {
-      productWithDetails.ratings.push(productWithDetails.rating);
-    }
-
     if (productWithDetails.campaign_text !== null) {
       productWithDetails.campaigns.push(productWithDetails.campaign_text);
-    }
-
-    // Calculate average rating
-    if (productWithDetails.ratings.length > 0) {
-      productWithDetails.starPoint = calculateAverageRating(
-        productWithDetails.ratings
-      );
-    } else {
-      productWithDetails.starPoint = 0; // Default to 0 if there are no reviews.
     }
 
     // Send the response
@@ -555,6 +549,36 @@ function calculateAverageRating(reviews) {
   const sum = reviews.reduce((total, review) => total + parseFloat(review), 0);
   return sum / reviews.length;
 }
+app.post("/saveRatingAndReview/:user_id/:product_id", async (req, res) => {
+  const { user_id, product_id } = req.params;
+  const { ratingPoint, review } = req.body;
+
+  try {
+    // Insert the rating and review into the product_reviews table
+    await pool.query(
+      "INSERT INTO product_reviews (id, user_id, product_id, rating, review_text) VALUES (default, $1, $2, $3, $4)",
+      [user_id, product_id, ratingPoint, review]
+    );
+
+    // Calculate average rating
+    const avgRatingRequest = await pool.query(
+      "SELECT AVG(rating) AS avg_rating FROM product_reviews WHERE product_id = $1",
+      [product_id]
+    );
+    const avgRating = avgRatingRequest.rows[0].avg_rating;
+
+    // Update the average rating in the products table
+    await pool.query("UPDATE products SET star_point = $1 WHERE id = $2", [
+      avgRating,
+      product_id,
+    ]);
+
+    res.status(201).send("Rating and review saved successfully.");
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Internal server error.");
+  }
+});
 
 app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
   try {
