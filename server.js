@@ -491,6 +491,7 @@ app.get("/getProductDetails/:product_id", async (req, res) => {
     p.product_status,
     p.category_id,
     p.sub_category_id,
+    p.star_point,
     c.category_name,
     sc.sub_category_name,
     COUNT(pr.product_id) AS ratings_count,
