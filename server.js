@@ -479,63 +479,59 @@ app.get("/getProductDetails/:product_id", async (req, res) => {
   try {
     const productsQuery = `
     SELECT
-    p.id,
-    p.manufacturer_id,
-    p.product_name,
-    p.price,
-    p.discounted_price,
-    p.image,
-    p.description,
-    p.stock_quantity,
-    p.to_be_delivered_date,
-    p.product_status,
-    p.category_id,
-    p.sub_category_id,
-    p.star_point,
-    c.category_name,
-    sc.sub_category_name,
-    COUNT(pr.product_id) AS ratings_count,
-    pr.rating,
-    pc.campaign_text,
-    m.manufacturer_name
-FROM products p
-LEFT JOIN product_reviews pr ON p.id = pr.product_id
-LEFT JOIN product_campaigns pc ON p.id = pc.product_id
-LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
-LEFT JOIN categories c ON p.category_id = c.category_id
-LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id
-WHERE p.id = $1
-GROUP BY
-    p.id,
-    p.manufacturer_id,
-    p.product_name,
-    p.price,
-    p.discounted_price,
-    p.image,
-    p.description,
-    p.stock_quantity,
-    p.to_be_delivered_date,
-    p.product_status,
-    p.category_id,
-    p.sub_category_id,
-    c.category_name,
-    sc.sub_category_name,
-    pr.rating,
-    pc.campaign_text,
-    m.manufacturer_name;
-
-    `;
+      p.id,
+      p.manufacturer_id,
+      p.product_name,
+      p.price,
+      p.discounted_price,
+      p.image,
+      p.description,
+      p.stock_quantity,
+      p.to_be_delivered_date,
+      p.product_status,
+      p.category_id,
+      p.sub_category_id,
+      p.star_point,
+      c.category_name,
+      sc.sub_category_name,
+      COUNT(pr.id) AS ratings_count,
+      pc.campaign_text,
+      m.manufacturer_name
+    FROM products p
+    LEFT JOIN product_reviews pr ON p.id = pr.product_id
+    LEFT JOIN product_campaigns pc ON p.id = pc.product_id
+    LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
+    LEFT JOIN categories c ON p.category_id = c.category_id
+    LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id
+    WHERE p.id = $1
+    GROUP BY
+      p.id,
+      c.category_name,
+      sc.sub_category_name,
+      pc.campaign_text,
+      m.manufacturer_name;
+  `;
 
     const productDetailsRequest = await pool.query(productsQuery, [product_id]);
     const productWithDetails = productDetailsRequest.rows[0];
 
-    // Initialize ratings and campaigns for the single product
-    productWithDetails.ratings = [];
-    productWithDetails.campaigns = [];
+    // Kullanıcı bilgilerini ayrı bir sorgu ile çekme
+    const userReviewsQuery = `
+    SELECT
+      pr.rating,
+      pr.review_text,
+      u.user_name,
+      u.user_surname
+    FROM product_reviews pr
+    LEFT JOIN users u ON pr.user_id = u.user_id
+    WHERE pr.product_id = $1;
+  `;
 
-    if (productWithDetails.campaign_text !== null) {
-      productWithDetails.campaigns.push(productWithDetails.campaign_text);
-    }
+    const userReviewsRequest = await pool.query(userReviewsQuery, [product_id]);
+    const userReviews = userReviewsRequest.rows;
+
+    // Kullanıcı yorumlarını ana ürün detaylarına ekleme
+    productWithDetails.reviewsAndRatings = userReviews;
 
     // Send the response
     res.json(productWithDetails);
