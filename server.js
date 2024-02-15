@@ -354,7 +354,7 @@ app.get("/getSubCategoriesOfCurrentCategory/:category_id", async (req, res) => {
   try {
     const category_id = req.params.category_id;
     const sub_categories_query =
-      "SELECT category_id, sub_category_id, sub_category_name, sub_category_img FROM sub_categories WHERE category_id = $1";
+      "SELECT category_id, sub_category_id, sub_category_name, sub_category_img FROM sub_categories WHERE category_id = $1 ORDER BY sub_category_id ASC";
     const getSubCategoriesRequest = await pool.query(sub_categories_query, [
       category_id,
     ]);
