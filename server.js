@@ -364,6 +364,32 @@ app.get("/getSubCategoriesOfCurrentCategory/:category_id", async (req, res) => {
   }
 });
 
+app.get("/getCategoriesWithSubCategories", async (req, res) => {
+  try {
+    const categoriesQuery = "SELECT category_id, category_name FROM categories";
+    const categoriesResult = await pool.query(categoriesQuery);
+    const categories = categoriesResult.rows;
+
+    const categoriesWithSubCategories = await Promise.all(
+      categories.map(async (category) => {
+        const categoryId = category.category_id;
+        const subCategoriesQuery =
+          "SELECT sub_category_id, sub_category_name FROM sub_categories WHERE category_id = $1 ORDER BY sub_category_id ASC ";
+        const subCategoriesResult = await pool.query(subCategoriesQuery, [
+          categoryId,
+        ]);
+        const subCategories = subCategoriesResult.rows;
+        return { ...category, sub_categories: subCategories };
+      })
+    );
+
+    res.json(categoriesWithSubCategories);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 app.get(
   "/getProductsOfCurrentSubCategory/:sub_category_id",
   async (req, res) => {
