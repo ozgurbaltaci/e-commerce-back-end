@@ -917,6 +917,23 @@ app.get("/getOrders/:user_id", async (req, res) => {
   }
 });
 
+app.get("/getReviewsOfCurrentUser/:user_id", async (req, res) => {
+  try {
+    const userId = req.params.user_id;
+
+    // Replace the following with your actual database query to retrieve orders with product information
+    const result = await pool.query(
+      "SELECT rw.id, rw.review_text, rw.rating, p.image, p.description, p.manufacturer_id, m.manufacturer_name FROM product_reviews rw LEFT JOIN products p ON rw.product_id = p.id LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id WHERE rw.user_id = $1 ",
+      [userId]
+    );
+
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 app.post("/addToFavorite/:user_id/:product_id", async (req, res) => {
   const user_id = req.params.user_id;
   const product_id = req.params.product_id;
