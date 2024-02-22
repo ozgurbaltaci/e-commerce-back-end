@@ -404,6 +404,7 @@ app.get(
       p.price,
       p.discounted_price,
       p.image,
+      p.star_point,
       p.description,
       p.stock_quantity,
       p.to_be_delivered_date,
@@ -412,8 +413,8 @@ app.get(
       p.sub_category_id,
       c.category_name,
       sc.sub_category_name,
-      pr.rating,
       pc.campaign_text,
+      COUNT(pr.rating) AS ratings_count,
       m.manufacturer_name
     
     FROM products p
@@ -421,7 +422,15 @@ app.get(
     LEFT JOIN product_campaigns pc ON p.id = pc.product_id
     LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
     LEFT JOIN categories c ON p.category_id = c.category_id
-    LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id WHERE p.sub_category_id = $1;
+    LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id WHERE p.sub_category_id = $1 GROUP BY 
+    p.id, 
+    c.category_name,
+    m.manufacturer_id, 
+    pc.campaign_text, 
+    c.category_name,
+    sc.sub_category_name,
+    m.manufacturer_name;
+;
     `;
 
       const productsRequest = await pool.query(productsQuery, [
@@ -450,17 +459,13 @@ app.get(
             toBeDeliveredDate: item.to_be_delivered_date,
             productStatus: item.product_status,
             ratings: [], // Include an array to store ratings
-            ratingsCount: 0,
+            ratingsCount: item.ratings_count,
             campaigns: [],
             manufacturerName: item.manufacturer_name,
             category_id: item.category_id,
             sub_category_id: item.sub_category_id,
+            starPoint: item.star_point,
           });
-        }
-
-        if (item.rating !== null) {
-          productsMap.get(id).ratings.push(item.rating);
-          productsMap.get(id).ratingsCount++;
         }
 
         if (item.campaign_text !== null) {
@@ -470,26 +475,6 @@ app.get(
 
       // Convert the map of products to an array
       const products = Array.from(productsMap.values());
-
-      // Calculate the average rating using the calculateAverageRating function
-      products.forEach((product) => {
-        if (product.ratings.length > 0) {
-          product.starPoint = calculateAverageRating(product.ratings);
-        }
-      });
-
-      // Add the calculateAverageRating function
-      function calculateAverageRating(reviews) {
-        if (reviews.length === 0) {
-          return 0; // Default to 0 if there are no reviews.
-        }
-
-        let sum = 0.0;
-        reviews.map((review) => {
-          sum = sum + parseFloat(review);
-        });
-        return sum / reviews.length;
-      }
 
       // Send the response
       res.json(products);
@@ -931,6 +916,70 @@ app.get("/getReviewsOfCurrentUser/:user_id", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+app.put("/updateReview/:review_id", async (req, res) => {
+  try {
+    const reviewId = req.params.review_id;
+    const { updatedReviewText, updatedRating } = req.body;
+    console.log(reviewId, updatedReviewText, updatedRating);
+    const result = await pool.query(
+      "UPDATE product_reviews SET review_text = $1, rating = $2 WHERE id = $3",
+      [updatedReviewText, updatedRating, reviewId]
+    );
+
+    // Calculate average rating
+    const avgRatingRequest = await pool.query(
+      "SELECT AVG(rating) AS avg_rating FROM product_reviews WHERE product_id = (SELECT product_id FROM product_reviews WHERE id = $1)",
+      [reviewId]
+    );
+    const avgRating = avgRatingRequest.rows[0].avg_rating;
+
+    // Update the average rating in the products table
+    await pool.query(
+      "UPDATE products SET star_point = $1 WHERE id = (SELECT product_id FROM product_reviews WHERE id = $2)",
+      [avgRating, reviewId]
+    );
+
+    res.status(201).json({ message: "Review updated successfully." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error." });
+  }
+});
+
+app.delete("/deleteReview/:review_id", async (req, res) => {
+  try {
+    const reviewId = req.params.review_id;
+
+    // Retrieve the product ID before deleting the review
+    const productIdRequest = await pool.query(
+      "SELECT product_id FROM product_reviews WHERE id = $1",
+      [reviewId]
+    );
+    const productId = productIdRequest.rows[0].product_id;
+
+    // Delete the review
+    await pool.query("DELETE FROM product_reviews WHERE id = $1", [reviewId]);
+
+    // Calculate average rating
+    const avgRatingRequest = await pool.query(
+      "SELECT AVG(rating) AS avg_rating FROM product_reviews WHERE product_id = $1",
+      [productId]
+    );
+    const avgRating = avgRatingRequest.rows[0].avg_rating || 0;
+
+    // Update the average rating in the products table
+    await pool.query("UPDATE products SET star_point = $1 WHERE id = $2", [
+      avgRating,
+      productId,
+    ]);
+
+    res.status(200).json({ message: "Review deleted successfully." });
+  } catch (error) {
+    console.error("Error deleting review:", error.message);
+    res.status(500).json({ message: "Server Error." });
   }
 });
 
