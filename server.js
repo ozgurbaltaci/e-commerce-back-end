@@ -1070,6 +1070,19 @@ app.delete("/deleteReview/:review_id", async (req, res) => {
   }
 });
 
+app.get("/getCoupons", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM coupons ORDER BY validity_end_date DESC"
+    );
+
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 app.post("/addToFavorite/:user_id/:product_id", async (req, res) => {
   const user_id = req.params.user_id;
   const product_id = req.params.product_id;
