@@ -918,6 +918,29 @@ app.get("/getCurrentUser/:user_id", async (req, res) => {
   }
 });
 
+app.put("/updateUser/:user_id", async (req, res) => {
+  try {
+    const userId = req.params.user_id;
+    const { currentUser } = req.body;
+
+    // Replace the following with your actual database query to retrieve orders with product information
+    const result = await pool.query(
+      "UPDATE users SET user_name = $1, user_surname = $2, user_mail = $3, user_phone = $4 WHERE user_id = $5 ",
+      [
+        currentUser.user_name,
+        currentUser.user_surname,
+        currentUser.user_mail,
+        currentUser.user_phone,
+        userId,
+      ]
+    );
+    res.status(201).send();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 app.get("/getReviewsOfCurrentUser/:user_id", async (req, res) => {
   try {
     const userId = req.params.user_id;
