@@ -941,6 +941,54 @@ app.put("/updateUser/:user_id", async (req, res) => {
   }
 });
 
+app.put("/updatePassword/:user_id", async (req, res) => {
+  try {
+    const userId = req.params.user_id;
+    const { newPassword, currentPassword } = req.body;
+
+    // Validate request body
+    if (!newPassword || !currentPassword) {
+      return res
+        .status(400)
+        .json({ error: "Both newPassword and currentPassword are required." });
+    }
+
+    // Retrieve current password from the database
+    const user = await pool.query(
+      "SELECT user_password FROM users WHERE user_id = $1",
+      [userId]
+    );
+    if (user.rows.length === 0) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const hashedCurrentPassword = user.rows[0].user_password;
+
+    // Compare currentPassword with the hashed password stored in the database
+    const passwordMatch = await bcrypt.compare(
+      currentPassword,
+      hashedCurrentPassword
+    );
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Current password is incorrect." });
+    }
+
+    // Hash the new password
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update the user's password in the database
+    await pool.query("UPDATE users SET user_password = $1 WHERE user_id = $2", [
+      hashedNewPassword,
+      userId,
+    ]);
+
+    res.status(200).json({ message: "Password updated successfully." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 app.get("/getReviewsOfCurrentUser/:user_id", async (req, res) => {
   try {
     const userId = req.params.user_id;
