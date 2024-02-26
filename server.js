@@ -902,6 +902,22 @@ app.get("/getOrders/:user_id", async (req, res) => {
   }
 });
 
+app.get("/getCurrentUser/:user_id", async (req, res) => {
+  try {
+    const userId = req.params.user_id;
+
+    // Replace the following with your actual database query to retrieve orders with product information
+    const result = await pool.query("SELECT * FROM users WHERE user_id = $1 ", [
+      userId,
+    ]);
+
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 app.get("/getReviewsOfCurrentUser/:user_id", async (req, res) => {
   try {
     const userId = req.params.user_id;
