@@ -1100,6 +1100,34 @@ app.get("/getSavedAddressesOfUser/:user_id", async (req, res) => {
   }
 });
 
+app.put("/saveNewAddressToCurrentUser/:user_id", async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const { address_data } = req.body;
+    const result = await pool.query(
+      "INSERT INTO users_saved_addresses VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+      [
+        user_id,
+        address_data.province,
+        address_data.district,
+        address_data.neighborhood,
+        address_data.street,
+        address_data.building_number,
+        address_data.floor_number,
+        address_data.door_number,
+        address_data.receiver_full_name,
+        address_data.receiver_phone_number,
+        address_data.address_title,
+      ]
+    );
+
+    res.status(201).json({ message: "Address saved successfully." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error." });
+  }
+});
+
 app.post("/addToFavorite/:user_id/:product_id", async (req, res) => {
   const user_id = req.params.user_id;
   const product_id = req.params.product_id;
