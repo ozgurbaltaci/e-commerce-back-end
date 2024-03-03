@@ -559,7 +559,7 @@ function calculateAverageRating(reviews) {
 }
 app.post("/saveRatingAndReview/:user_id/:product_id", async (req, res) => {
   const { user_id, product_id } = req.params;
-  const { ratingPoint, review } = req.body;
+  const { ratingPoint, review, manufacturer_id } = req.body;
 
   try {
     // Insert the rating and review into the product_reviews table
@@ -580,6 +580,8 @@ app.post("/saveRatingAndReview/:user_id/:product_id", async (req, res) => {
       avgRating,
       product_id,
     ]);
+
+    await updateManufacturerRating(manufacturer_id);
 
     res.status(201).send("Rating and review saved successfully.");
   } catch (err) {
@@ -1009,7 +1011,7 @@ app.get("/getReviewsOfCurrentUser/:user_id", async (req, res) => {
 app.put("/updateReview/:review_id", async (req, res) => {
   try {
     const reviewId = req.params.review_id;
-    const { updatedReviewText, updatedRating } = req.body;
+    const { updatedReviewText, updatedRating, manufacturer_id } = req.body;
     console.log(reviewId, updatedReviewText, updatedRating);
     const result = await pool.query(
       "UPDATE product_reviews SET review_text = $1, rating = $2 WHERE id = $3",
@@ -1029,6 +1031,7 @@ app.put("/updateReview/:review_id", async (req, res) => {
       [avgRating, reviewId]
     );
 
+    await updateManufacturerRating(manufacturer_id);
     res.status(201).json({ message: "Review updated successfully." });
   } catch (error) {
     console.error(error);
@@ -1039,6 +1042,7 @@ app.put("/updateReview/:review_id", async (req, res) => {
 app.delete("/deleteReview/:review_id", async (req, res) => {
   try {
     const reviewId = req.params.review_id;
+    const { manufacturer_id } = req.body;
 
     // Retrieve the product ID before deleting the review
     const productIdRequest = await pool.query(
@@ -1062,6 +1066,8 @@ app.delete("/deleteReview/:review_id", async (req, res) => {
       avgRating,
       productId,
     ]);
+
+    await updateManufacturerRating(manufacturer_id);
 
     res.status(200).json({ message: "Review deleted successfully." });
   } catch (error) {
@@ -1184,9 +1190,7 @@ app.get("/getManufacturerAndProducts/:manufacturer_id", async (req, res) => {
     const manufacturer_id = req.params.manufacturer_id;
     const manufacturerQuery = `
       SELECT
-        manufacturer_id,
-        manufacturer_name,
-        manufacturer_image
+        *
       FROM manufacturers
       WHERE manufacturer_id = $1;
     `;
@@ -1284,6 +1288,26 @@ app.get("/getManufacturerAndProducts/:manufacturer_id", async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 });
+
+async function updateManufacturerRating(manufacturer_id) {
+  try {
+    // Ortalama değeri hesapla
+    const avgRatingRequest = await pool.query(
+      "SELECT AVG(pr.rating) AS avg_rating FROM product_reviews pr JOIN products p ON pr.product_id = p.id WHERE p.manufacturer_id = $1",
+      [manufacturer_id]
+    );
+    const avgRating = avgRatingRequest.rows[0].avg_rating || 0;
+
+    // Üreticinin ortalama değerini güncelle
+    await pool.query(
+      "UPDATE manufacturers SET manufacturer_rating = $1 WHERE manufacturer_id = $2",
+      [avgRating, manufacturer_id]
+    );
+  } catch (error) {
+    console.error("Error updating manufacturer rating:", error.message);
+    throw error;
+  }
+}
 
 app.listen(3002, () => {
   console.log("Server has started on port 3002");
