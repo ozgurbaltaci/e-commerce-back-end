@@ -1179,6 +1179,112 @@ app.delete("/removeFromCart/:user_id/:product_id", async (req, res) => {
   }
 });
 
+app.get("/getManufacturerAndProducts/:manufacturer_id", async (req, res) => {
+  try {
+    const manufacturer_id = req.params.manufacturer_id;
+    const manufacturerQuery = `
+      SELECT
+        manufacturer_id,
+        manufacturer_name,
+        manufacturer_image
+      FROM manufacturers
+      WHERE manufacturer_id = $1;
+    `;
+    const manufacturerRequest = await pool.query(manufacturerQuery, [
+      manufacturer_id,
+    ]);
+    const manufacturerInfo = manufacturerRequest.rows[0];
+
+    const productsQuery = `
+    SELECT
+    p.id,
+    p.manufacturer_id,
+    p.product_name,
+    p.price,
+    p.discounted_price,
+    p.image,
+    p.star_point,
+    p.description,
+    p.stock_quantity,
+    p.to_be_delivered_date,
+    p.product_status,
+    p.category_id,
+    p.sub_category_id,
+    c.category_name,
+    sc.sub_category_name,
+    pc.campaign_text,
+    COUNT(pr.rating) AS ratings_count,
+    m.manufacturer_name
+  
+  FROM products p
+  LEFT JOIN product_reviews pr ON p.id = pr.product_id
+  LEFT JOIN product_campaigns pc ON p.id = pc.product_id
+  LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
+  LEFT JOIN categories c ON p.category_id = c.category_id
+  LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id WHERE p.manufacturer_id = $1 GROUP BY 
+  p.id, 
+  c.category_name,
+  m.manufacturer_id, 
+  pc.campaign_text, 
+  c.category_name,
+  sc.sub_category_name,
+  m.manufacturer_name;
+    `;
+    const productsRequest = await pool.query(productsQuery, [manufacturer_id]);
+    const productsOfManufacturer = productsRequest.rows;
+
+    const productsRows = productsRequest.rows;
+
+    // Modify the structure inside the productsMap to include an array for ratings
+    const productsMap = new Map();
+
+    productsRows.forEach((item) => {
+      const id = item.id;
+      if (!productsMap.has(id)) {
+        productsMap.set(id, {
+          product_id: item.id,
+          manufacturerId: item.manufacturer_id,
+          productName: item.product_name,
+          price: item.price !== null ? +item.price : null,
+          discountedPrice:
+            item.discounted_price !== null ? +item.discounted_price : null,
+          image: item.image,
+          description: item.description,
+          category_name: item.category_name,
+          sub_category_name: item.sub_category_name,
+          stockQuantity: item.stock_quantity,
+          toBeDeliveredDate: item.to_be_delivered_date,
+          productStatus: item.product_status,
+          ratings: [], // Include an array to store ratings
+          ratingsCount: item.ratings_count,
+          campaigns: [],
+          manufacturerName: item.manufacturer_name,
+          category_id: item.category_id,
+          sub_category_id: item.sub_category_id,
+          starPoint: item.star_point,
+        });
+      }
+
+      if (item.campaign_text !== null) {
+        productsMap.get(id).campaigns.push(item.campaign_text);
+      }
+    });
+
+    // Convert the map of products to an array
+    const products = Array.from(productsMap.values());
+
+    const responseData = {
+      manufacturerInfo: manufacturerInfo,
+      productsOfManufacturer: products,
+    };
+
+    res.json(responseData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 app.listen(3002, () => {
   console.log("Server has started on port 3002");
 });
