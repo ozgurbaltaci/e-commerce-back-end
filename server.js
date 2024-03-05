@@ -162,6 +162,7 @@ app.post("/login", async (req, res) => {
         expiresIn: "1h", // Set an expiration time for the access token
       }
     );
+    const expirationTime = new Date(new Date().getTime() + 36000 * 1000);
 
     res.status(200).json({
       user_id: user.rows[0].user_id,
@@ -170,6 +171,7 @@ app.post("/login", async (req, res) => {
       user_surname: user.rows[0].user_surname,
       user_phone: user.rows[0].user_phone,
       user_mail: user.rows[0].user_mail,
+      accessTokenExpirationTime: expirationTime,
     });
   } catch (err) {
     console.error(err.message);
