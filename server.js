@@ -906,6 +906,104 @@ app.get("/getOrders/:user_id", async (req, res) => {
   }
 });
 
+app.get("/getManufacturersOrders/:manufacturer_id", async (req, res) => {
+  try {
+    const manufacturerId = req.params.manufacturer_id;
+
+    // Fetch manufacturer information
+    const manufacturerInfoQuery = await pool.query(
+      "SELECT * FROM manufacturers WHERE manufacturer_id = $1",
+      [manufacturerId]
+    );
+    const manufacturerInfo = manufacturerInfoQuery.rows[0];
+
+    // Calculate total sales, total income, pending orders, and pending refunds
+    const totalSalesQuery = await pool.query(
+      "SELECT COALESCE(SUM(o.desired_amount), 0) AS total_sales FROM orders_table o JOIN products p ON o.product_id = p.id WHERE p.manufacturer_id = $1",
+      [manufacturerId]
+    );
+    const totalSales = parseFloat(totalSalesQuery.rows[0].total_sales);
+
+    const totalIncomeQuery = await pool.query(
+      "SELECT COALESCE(SUM(o.desired_amount * o.price_on_add), 0) AS total_income FROM orders_table o JOIN products p ON o.product_id = p.id WHERE p.manufacturer_id = $1",
+      [manufacturerId]
+    );
+    const totalIncome = parseFloat(totalIncomeQuery.rows[0].total_income);
+
+    //order_status_id = 1 represents the pending orders
+    const pendingOrdersQuery = await pool.query(
+      "SELECT COUNT(*) AS pending_orders FROM orders_table o JOIN products p ON o.product_id = p.id WHERE p.manufacturer_id = $1 AND o.order_status_id = $2",
+      [manufacturerId, 1]
+    );
+    const pendingOrders = parseInt(pendingOrdersQuery.rows[0].pending_orders);
+
+    const result = await pool.query(
+      "SELECT o.order_id, o.desired_amount, o.price_on_add, o.order_status_id, o.order_date, os.order_status, o.receiver_phone, p.product_name, p.image, p.description, p.manufacturer_id, m.manufacturer_name, o.delivery_address, p.stock_quantity, (o.order_date + interval '2 weeks') AS delivery_deadline FROM orders_table o LEFT JOIN products p ON o.product_id = p.id LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id LEFT JOIN order_status os ON o.order_status_id = os.order_status_id WHERE p.manufacturer_id = $1 ORDER BY o.order_id;",
+      [manufacturerId]
+    );
+
+    const ordersWithProducts = [];
+    let currentOrder = null;
+
+    // Process the query result to create the desired response structure
+    result.rows.forEach((row) => {
+      // Check if the order has changed
+      if (!currentOrder || currentOrder.order_id !== row.order_id) {
+        // Create a new order object
+        currentOrder = {
+          order_id: row.order_id,
+          order_status_id: row.order_status_id,
+          order_date: row.order_date.toLocaleDateString("en-US", {
+            timeZone: "Europe/Istanbul",
+          }),
+          order_status: row.order_status,
+          products: [],
+          total_price: 0, // Initialize total_price for the order
+          receiver_phone: row.receiver_phone,
+
+          delivery_address: row.delivery_address,
+          delivery_deadline: row.delivery_deadline.toLocaleDateString("en-US", {
+            timeZone: "Europe/Istanbul",
+          }),
+        };
+        ordersWithProducts.push(currentOrder);
+      }
+
+      // Calculate the total price for the current product and add it to the order's total_price
+      const totalPriceForProduct = row.desired_amount * row.price_on_add;
+      currentOrder.total_price += totalPriceForProduct;
+
+      // Add the product details to the current order's products array
+      currentOrder.products.push({
+        product_name: row.product_name,
+        description: row.description,
+        image: row.image,
+        manufacturer_id: row.manufacturer_id,
+        manufacturer_name: row.manufacturer_name,
+        desired_amount: row.desired_amount,
+        price_on_add: row.price_on_add,
+        total_price_for_product: totalPriceForProduct,
+        stock_quantity: row.stock_quantity,
+      });
+    });
+
+    const response = {
+      manufacturerInfo: {
+        ...manufacturerInfo,
+        totalSales: totalSales,
+        totalIncome: totalIncome,
+        pendingOrders: pendingOrders,
+      },
+      orders: ordersWithProducts,
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 app.get("/getCurrentUser/:user_id", async (req, res) => {
   try {
     const userId = req.params.user_id;
