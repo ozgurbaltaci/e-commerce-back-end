@@ -1004,6 +1004,23 @@ app.get("/getManufacturersOrders/:manufacturer_id", async (req, res) => {
   }
 });
 
+app.put("/updateOrderStatus/:order_id/:order_status_id", async (req, res) => {
+  try {
+    const order_status_id = parseInt(req.params.order_status_id);
+    const order_id = req.params.order_id;
+
+    // Replace the following with your actual database query to retrieve orders with product information
+    const result = await pool.query(
+      "UPDATE orders_table SET order_status_id = $1 WHERE order_id = $2 ",
+      [order_status_id, order_id]
+    );
+    res.status(200).send();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 app.get("/getCurrentUser/:user_id", async (req, res) => {
   try {
     const userId = req.params.user_id;
