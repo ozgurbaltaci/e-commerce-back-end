@@ -833,12 +833,20 @@ app.post("/saveOrder/:user_id", async (req, res) => {
 
     // Loop through each selected product and save it to the orders_table
     const promises = selectedProducts.map(async (product) => {
-      const { product_id, desired_amount, currPrice } = product;
+      const { product_id, desired_amount, currPrice, manufacturer_id } =
+        product;
 
       // Replace the following with your actual database query to insert into orders_table
       await pool.query(
-        "INSERT INTO orders_table (order_id, user_id, product_id, desired_amount, price_on_add, order_status_id, order_date) VALUES ($1, $2, $3, $4, $5, 1, CURRENT_TIMESTAMP)",
-        [order_id, userId, product_id, desired_amount, currPrice]
+        "INSERT INTO orders_table (order_id, user_id, product_id, desired_amount, price_on_add, order_status_id, order_date, manufacturer_id) VALUES ($1, $2, $3, $4, $5, 1, CURRENT_TIMESTAMP, $6)",
+        [
+          order_id,
+          userId,
+          product_id,
+          desired_amount,
+          currPrice,
+          manufacturer_id,
+        ]
       );
     });
 
@@ -871,7 +879,6 @@ app.get("/getOrders/:user_id", async (req, res) => {
         // Create a new order object
         currentOrder = {
           order_id: row.order_id,
-          order_status_id: row.order_status_id,
           order_date: row.order_date.toLocaleDateString("en-US", {
             timeZone: "Europe/Istanbul",
           }),
@@ -888,6 +895,8 @@ app.get("/getOrders/:user_id", async (req, res) => {
 
       // Add the product details to the current order's products array
       currentOrder.products.push({
+        order_status_id: row.order_status_id,
+
         product_name: row.product_name,
         description: row.description,
         image: row.image,
@@ -1004,22 +1013,26 @@ app.get("/getManufacturersOrders/:manufacturer_id", async (req, res) => {
   }
 });
 
-app.put("/updateOrderStatus/:order_id/:order_status_id", async (req, res) => {
-  try {
-    const order_status_id = parseInt(req.params.order_status_id);
-    const order_id = req.params.order_id;
+app.put(
+  "/updateOrderStatus/:order_id/:manufacturer_id/:order_status_id",
+  async (req, res) => {
+    try {
+      const order_status_id = parseInt(req.params.order_status_id);
+      const order_id = req.params.order_id;
+      const manufacturer_id = req.params.manufacturer_id;
 
-    // Replace the following with your actual database query to retrieve orders with product information
-    const result = await pool.query(
-      "UPDATE orders_table SET order_status_id = $1 WHERE order_id = $2 ",
-      [order_status_id, order_id]
-    );
-    res.status(200).send();
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error." });
+      // Replace the following with your actual database query to retrieve orders with product information
+      const result = await pool.query(
+        "UPDATE orders_table SET order_status_id = $1 WHERE order_id = $2 AND manufacturer_id = $3",
+        [order_status_id, order_id, manufacturer_id]
+      );
+      res.status(200).send();
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error." });
+    }
   }
-});
+);
 
 app.get("/getCurrentUser/:user_id", async (req, res) => {
   try {
