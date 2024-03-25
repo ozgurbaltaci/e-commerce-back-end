@@ -828,7 +828,9 @@ const isOrderIdUnique = async (orderId) => {
 app.post("/saveOrder/:user_id", async (req, res) => {
   try {
     const userId = req.params.user_id;
-    const { selectedProducts } = req.body;
+    const { selectedProducts, receiverName, receiverPhone, deliveryAddress } =
+      req.body;
+
     const order_id = generateOrderId();
 
     // Loop through each selected product and save it to the orders_table
@@ -838,7 +840,7 @@ app.post("/saveOrder/:user_id", async (req, res) => {
 
       // Replace the following with your actual database query to insert into orders_table
       await pool.query(
-        "INSERT INTO orders_table (order_id, user_id, product_id, desired_amount, price_on_add, order_status_id, order_date, manufacturer_id) VALUES ($1, $2, $3, $4, $5, 1, CURRENT_TIMESTAMP, $6)",
+        "INSERT INTO orders_table (order_id, user_id, product_id, desired_amount, price_on_add, order_status_id, order_date, manufacturer_id, delivery_address, receiver_phone, receiver_name) VALUES ($1, $2, $3, $4, $5, 1, CURRENT_TIMESTAMP, $6, $7, $8, $9)",
         [
           order_id,
           userId,
@@ -846,6 +848,9 @@ app.post("/saveOrder/:user_id", async (req, res) => {
           desired_amount,
           currPrice,
           manufacturer_id,
+          deliveryAddress,
+          receiverPhone,
+          receiverName,
         ]
       );
     });
@@ -947,7 +952,7 @@ app.get("/getManufacturersOrders/:manufacturer_id", async (req, res) => {
     const pendingOrders = parseInt(pendingOrdersQuery.rows[0].pending_orders);
 
     const result = await pool.query(
-      "SELECT o.order_id, o.desired_amount, o.price_on_add, o.order_status_id, o.order_date, os.order_status, o.receiver_phone, p.product_name, p.image, p.description, p.manufacturer_id, m.manufacturer_name, o.delivery_address, p.stock_quantity, (o.order_date + interval '2 weeks') AS delivery_deadline FROM orders_table o LEFT JOIN products p ON o.product_id = p.id LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id LEFT JOIN order_status os ON o.order_status_id = os.order_status_id WHERE p.manufacturer_id = $1 ORDER BY o.order_id;",
+      "SELECT o.order_id, o.desired_amount, o.price_on_add, o.order_status_id, o.order_date, os.order_status, o.receiver_phone, o.receiver_name, p.product_name, p.image, p.description, p.manufacturer_id, m.manufacturer_name, o.delivery_address, p.stock_quantity, (o.order_date + interval '2 weeks') AS delivery_deadline FROM orders_table o LEFT JOIN products p ON o.product_id = p.id LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id LEFT JOIN order_status os ON o.order_status_id = os.order_status_id WHERE p.manufacturer_id = $1 ORDER BY o.order_id;",
       [manufacturerId]
     );
 
@@ -969,6 +974,7 @@ app.get("/getManufacturersOrders/:manufacturer_id", async (req, res) => {
           products: [],
           total_price: 0, // Initialize total_price for the order
           receiver_phone: row.receiver_phone,
+          receiver_name: row.receiver_name,
 
           delivery_address: row.delivery_address,
           delivery_deadline: row.delivery_deadline.toLocaleDateString("en-US", {
@@ -1223,13 +1229,20 @@ app.get("/getSavedAddressesOfUser/:user_id", async (req, res) => {
   try {
     const userId = req.params.user_id;
 
-    // Replace the following with your actual database query to retrieve orders with product information
     const result = await pool.query(
       "SELECT * FROM users_saved_addresses WHERE user_id = $1 ",
       [userId]
     );
 
-    res.status(200).json(result.rows);
+    const modifiedRows = result.rows.map((row) => {
+      // Add your additional field here
+      return {
+        ...row,
+        full_address: `${row.province} province, ${row.district} district, ${row.neighborhood} neighborhood, ${row.street} street, building ${row.building_number}, floor ${row.floor_number}, door ${row.door_number}`,
+      };
+    });
+
+    res.status(200).json(modifiedRows);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error." });
