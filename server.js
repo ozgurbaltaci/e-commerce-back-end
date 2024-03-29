@@ -31,45 +31,38 @@ function verifyToken(req, res, next) {
 }
 app.post("/uploadProduct", async (req, res) => {
   const {
-    manufacturerName,
-    productName,
+    product_name,
     price,
     discountedPrice,
     image,
-    category,
     description,
-    stockQuantity,
-    toBeDeliveredDate,
-    campaigns,
-    productStatus,
+    stock_quantity,
+    category_id,
+    sub_category_id,
+    manufacturer_id,
   } = req.body;
+  const product = req.body;
+  console.log("gelen product", product, "stock", stock_quantity);
 
   try {
     const addProductQuery = await pool.query(
-      "INSERT INTO products VALUES (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+      "INSERT INTO products VALUES (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
       [
-        manufacturerName,
-        productName,
+        product_name,
         parseFloat(price),
-        parseFloat(discountedPrice),
+        discountedPrice ? parseFloat(discountedPrice) : null,
         image,
-        category,
         description,
-        parseInt(stockQuantity),
-        toBeDeliveredDate,
-        productStatus,
+        parseInt(stock_quantity),
+        "active",
+        parseInt(manufacturer_id),
+        parseInt(category_id),
+        parseInt(sub_category_id),
+
+        0,
       ]
     );
-
-    const product_id = addProductQuery.rows[0].id;
-
-    for (const campaign of campaigns) {
-      await pool.query("INSERT INTO product_campaigns VALUES ($1, $2, $3)", [
-        product_id,
-        campaign.type,
-        campaign.campaign_validity_end_date,
-      ]);
-    }
+    res.status(201).send();
   } catch (err) {
     res.status(500).send();
     console.error(err.message);
@@ -270,7 +263,6 @@ app.get("/getProducts", async (req, res) => {
     p.image,
     p.description,
     p.stock_quantity,
-    p.to_be_delivered_date,
     p.product_status,
     p.category_id,
     p.sub_category_id,
@@ -314,7 +306,6 @@ GROUP BY
           image: item.image,
           description: item.description,
           stockQuantity: item.stock_quantity,
-          toBeDeliveredDate: item.to_be_delivered_date,
           productStatus: item.product_status,
           ratings: [], // Include an array to store ratings
           ratingsCount: item.ratings_count,
@@ -357,7 +348,6 @@ app.get("/searchProducts", async (req, res) => {
         p.image,
         p.description,
         p.stock_quantity,
-        p.to_be_delivered_date,
         p.product_status,
         p.category_id,
         p.sub_category_id,
@@ -415,7 +405,6 @@ app.get("/searchProducts", async (req, res) => {
           category_name: item.category_name,
           sub_category_name: item.sub_category_name,
           stockQuantity: item.stock_quantity,
-          toBeDeliveredDate: item.to_be_delivered_date,
           productStatus: item.product_status,
           ratings: [], // Include an array to store ratings
           ratingsCount: item.ratings_count,
@@ -510,7 +499,6 @@ app.get(
       p.star_point,
       p.description,
       p.stock_quantity,
-      p.to_be_delivered_date,
       p.product_status,
       p.category_id,
       p.sub_category_id,
@@ -559,7 +547,6 @@ app.get(
             category_name: item.category_name,
             sub_category_name: item.sub_category_name,
             stockQuantity: item.stock_quantity,
-            toBeDeliveredDate: item.to_be_delivered_date,
             productStatus: item.product_status,
             ratings: [], // Include an array to store ratings
             ratingsCount: item.ratings_count,
@@ -601,7 +588,6 @@ app.get("/getProductDetails/:product_id", async (req, res) => {
       p.image,
       p.description,
       p.stock_quantity,
-      p.to_be_delivered_date,
       p.product_status,
       p.category_id,
       p.sub_category_id,
@@ -708,7 +694,6 @@ SELECT
   p.image,
   p.description,
   p.stock_quantity,
-  p.to_be_delivered_date,
   p.product_status,
   pr.rating,
   pc.campaign_text,
@@ -739,7 +724,6 @@ WHERE uf.user_id = $1;
           image: item.image,
           description: item.description,
           stockQuantity: item.stock_quantity,
-          toBeDeliveredDate: item.to_be_delivered_date,
           productStatus: item.product_status,
           ratings: [], // Include an array to store ratings
           ratingsCount: 0,
@@ -1454,7 +1438,6 @@ app.get("/getManufacturerAndProducts/:manufacturer_id", async (req, res) => {
     p.star_point,
     p.description,
     p.stock_quantity,
-    p.to_be_delivered_date,
     p.product_status,
     p.category_id,
     p.sub_category_id,
