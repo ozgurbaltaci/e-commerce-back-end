@@ -1116,6 +1116,22 @@ app.get("/getManufacturersOrders/:manufacturer_id", async (req, res) => {
   }
 });
 
+app.put("/updateManufacturer/:manufacturer_id", async (req, res) => {
+  try {
+    const { manufacturer_id } = req.params;
+    const { manufacturer_image } = req.body;
+
+    const result = await pool.query(
+      "UPDATE manufacturers SET manufacturer_image = $1 WHERE manufacturer_id = $2 ",
+      [manufacturer_image, manufacturer_id]
+    );
+    res.status(201).send();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 app.put(
   "/updateOrderStatus/:order_id/:manufacturer_id/:order_status_id",
   async (req, res) => {
