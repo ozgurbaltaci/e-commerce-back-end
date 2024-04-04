@@ -456,6 +456,18 @@ app.get("/getSubCategoriesOfCurrentCategory/:category_id", async (req, res) => {
   }
 });
 
+app.get("/getAllSubCategories", async (req, res) => {
+  try {
+    const category_id = req.params.category_id;
+    const sub_categories_query =
+      "SELECT s.sub_category_id, s.sub_category_name, s.sub_category_img, c.category_name FROM sub_categories s LEFT JOIN categories c ON s.category_id=c.category_id ORDER BY RANDOM()";
+    const getSubCategoriesRequest = await pool.query(sub_categories_query);
+    res.json(getSubCategoriesRequest.rows);
+  } catch (err) {
+    console.log(err);
+  }
+});
+
 app.get("/getCategoriesWithSubCategories", async (req, res) => {
   try {
     const categoriesQuery = "SELECT category_id, category_name FROM categories";
