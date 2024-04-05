@@ -251,6 +251,7 @@ app.get("/getDeneme", async (req, res) => {
 });
 
 app.get("/getProducts", async (req, res) => {
+  const { user_id } = req.query;
   try {
     // Fetch all products and related data in a single query
     const productsQuery = `
@@ -270,7 +271,8 @@ app.get("/getProducts", async (req, res) => {
     COUNT(pr.rating) AS ratings_count,
     MAX(pr.rating) AS max_rating,
     pc.campaign_text,
-    m.manufacturer_name
+    m.manufacturer_name,
+    CASE WHEN uf.product_id IS NULL THEN false ELSE true END AS is_favorite
 FROM 
     products p
 LEFT JOIN 
@@ -279,15 +281,19 @@ LEFT JOIN
     product_campaigns pc ON p.id = pc.product_id
 LEFT JOIN 
     manufacturers m ON p.manufacturer_id = m.manufacturer_id
+LEFT JOIN 
+    users_favorites uf ON p.id = uf.product_id AND uf.user_id = $1
+    
 GROUP BY 
     p.id, 
     m.manufacturer_id, 
     pc.campaign_text, 
-    m.manufacturer_name;
+    m.manufacturer_name,
+    uf.product_id;
 
     `;
 
-    const productsRequest = await pool.query(productsQuery);
+    const productsRequest = await pool.query(productsQuery, [user_id]);
     const productsRows = productsRequest.rows;
 
     // Modify the structure inside the productsMap to include an array for ratings
@@ -297,6 +303,7 @@ GROUP BY
       const id = item.id;
       if (!productsMap.has(id)) {
         productsMap.set(id, {
+          is_favorite: item.is_favorite,
           product_id: item.id,
           manufacturerId: item.manufacturer_id,
           productName: item.product_name,
@@ -498,8 +505,10 @@ app.get(
   "/getProductsOfCurrentSubCategory/:sub_category_id",
   async (req, res) => {
     const sub_category_id = req.params.sub_category_id;
+    const { user_id } = req.query;
+
     try {
-      // Fetch all products and related data in a single query
+      // Fetch all products and related data along with favorite information
       const productsQuery = `
       SELECT
       p.id,
@@ -518,26 +527,31 @@ app.get(
       sc.sub_category_name,
       pc.campaign_text,
       COUNT(pr.rating) AS ratings_count,
-      m.manufacturer_name
+      m.manufacturer_name,
+      CASE WHEN uf.product_id IS NULL THEN false ELSE true END AS is_favorite
     
     FROM products p
     LEFT JOIN product_reviews pr ON p.id = pr.product_id
     LEFT JOIN product_campaigns pc ON p.id = pc.product_id
     LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
     LEFT JOIN categories c ON p.category_id = c.category_id
-    LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id WHERE p.sub_category_id = $1 GROUP BY 
+    LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id
+    LEFT JOIN users_favorites uf ON p.id = uf.product_id AND uf.user_id = $2
+    WHERE p.sub_category_id = $1 
+    GROUP BY 
     p.id, 
     c.category_name,
     m.manufacturer_id, 
     pc.campaign_text, 
     c.category_name,
     sc.sub_category_name,
-    m.manufacturer_name;
-;
-    `;
+    m.manufacturer_name,
+    uf.product_id;
+      `;
 
       const productsRequest = await pool.query(productsQuery, [
         sub_category_id,
+        user_id,
       ]);
       const productsRows = productsRequest.rows;
 
@@ -567,6 +581,7 @@ app.get(
             category_id: item.category_id,
             sub_category_id: item.sub_category_id,
             starPoint: item.star_point,
+            is_favorite: item.is_favorite, // Include information if product is favorite
           });
         }
 
@@ -580,6 +595,7 @@ app.get(
 
       // Send the response
       res.json(products);
+      console.log(products);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Internal server error" });
@@ -589,6 +605,7 @@ app.get(
 
 app.get("/getProductDetails/:product_id", async (req, res) => {
   const product_id = req.params.product_id;
+  const { user_id } = req.query;
   try {
     const productsQuery = `
     SELECT
@@ -608,23 +625,31 @@ app.get("/getProductDetails/:product_id", async (req, res) => {
       sc.sub_category_name,
       COUNT(pr.id) AS ratings_count,
       pc.campaign_text,
-      m.manufacturer_name
+      m.manufacturer_name,
+      CASE WHEN uf.product_id IS NULL THEN false ELSE true END AS is_favorite
+    
     FROM products p
     LEFT JOIN product_reviews pr ON p.id = pr.product_id
     LEFT JOIN product_campaigns pc ON p.id = pc.product_id
     LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
     LEFT JOIN categories c ON p.category_id = c.category_id
     LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id
+    LEFT JOIN users_favorites uf ON p.id = uf.product_id AND uf.user_id = $2
+  
     WHERE p.id = $1
     GROUP BY
       p.id,
       c.category_name,
       sc.sub_category_name,
       pc.campaign_text,
-      m.manufacturer_name;
+      m.manufacturer_name,
+      uf.product_id;
   `;
 
-    const productDetailsRequest = await pool.query(productsQuery, [product_id]);
+    const productDetailsRequest = await pool.query(productsQuery, [
+      product_id,
+      user_id,
+    ]);
     const productWithDetails = productDetailsRequest.rows[0];
 
     // Kullanıcı bilgilerini ayrı bir sorgu ile çekme
@@ -644,6 +669,8 @@ app.get("/getProductDetails/:product_id", async (req, res) => {
 
     // Kullanıcı yorumlarını ana ürün detaylarına ekleme
     productWithDetails.reviewsAndRatings = userReviews;
+
+    console.log(productWithDetails);
 
     // Send the response
     res.json(productWithDetails);
@@ -715,6 +742,7 @@ JOIN products p ON uf.product_id = p.id
 LEFT JOIN product_reviews pr ON p.id = pr.product_id
 LEFT JOIN product_campaigns pc ON p.id = pc.product_id
 LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
+
 WHERE uf.user_id = $1;
 `;
 
@@ -727,6 +755,7 @@ WHERE uf.user_id = $1;
       const id = item.id;
       if (!favoriteProductsMap.has(id)) {
         favoriteProductsMap.set(id, {
+          is_favorite: true,
           product_id: item.id,
           manufacturerId: item.manufacturer_id,
           productName: item.product_name,
@@ -860,27 +889,6 @@ app.put("/updateDesiredAmount/:user_id/:id", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
     console.error(err.message);
-  }
-});
-
-app.get("/getFavoritesIdsOfUser/:user_id", async (req, res) => {
-  try {
-    // Get the user_id from the URL parameter
-    const user_id = req.params.user_id;
-
-    // Fetch favorite products for the specified user
-    const favoritesQuery =
-      "SELECT product_id FROM users_favorites WHERE user_id = $1 ";
-
-    const favoritesIdsRequest = await pool.query(favoritesQuery, [user_id]);
-    const favoriteProductsIds = favoritesIdsRequest.rows.map(
-      (row) => row.product_id
-    );
-
-    res.json(favoriteProductsIds);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
   }
 });
 
