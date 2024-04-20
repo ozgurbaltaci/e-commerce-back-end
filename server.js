@@ -343,6 +343,7 @@ GROUP BY
 app.get("/searchProducts", async (req, res) => {
   try {
     const { searchInput } = req.query;
+    const { user_id } = req.query;
 
     // Fetch products with matching product name or description
     const productsQuery = `
@@ -363,7 +364,9 @@ app.get("/searchProducts", async (req, res) => {
         pc.campaign_text,
         COUNT(pr.rating) AS ratings_count,
         m.manufacturer_name,
-        p.star_point
+        p.star_point,
+        CASE WHEN uf.product_id IS NULL THEN false ELSE true END AS is_favorite
+    
       FROM 
         products p
       LEFT JOIN 
@@ -376,6 +379,9 @@ app.get("/searchProducts", async (req, res) => {
         categories c ON p.category_id = c.category_id
       LEFT JOIN 
         sub_categories sc ON p.sub_category_id = sc.sub_category_id
+      LEFT JOIN 
+        users_favorites uf ON p.id = uf.product_id AND uf.user_id = $2
+    
       WHERE 
         LOWER(p.product_name) LIKE LOWER($1)
         OR LOWER(p.description) LIKE LOWER($1)
@@ -386,11 +392,13 @@ app.get("/searchProducts", async (req, res) => {
         pc.campaign_text, 
         c.category_name,
         sc.sub_category_name,
-        m.manufacturer_name;
+        m.manufacturer_name,
+        uf.product_id;
     `;
 
     const productsRequest = await pool.query(productsQuery, [
       `%${searchInput}%`,
+      user_id,
     ]);
     const productsRows = productsRequest.rows;
 
@@ -401,6 +409,7 @@ app.get("/searchProducts", async (req, res) => {
       const id = item.id;
       if (!productsMap.has(id)) {
         productsMap.set(id, {
+          is_favorite: item.is_favorite,
           product_id: item.id,
           manufacturerId: item.manufacturer_id,
           productName: item.product_name,
