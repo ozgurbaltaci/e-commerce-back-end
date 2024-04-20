@@ -513,8 +513,7 @@ app.get("/getCategoriesWithSubCategories", async (req, res) => {
 app.get(
   "/getProductsOfCurrentSubCategory/:sub_category_id",
   async (req, res) => {
-    const sub_category_id = req.params.sub_category_id;
-    const { user_id } = req.query;
+    const sub_category_id = parseInt(req.params.sub_category_id);
 
     try {
       // Fetch all products and related data along with favorite information
@@ -536,8 +535,8 @@ app.get(
       sc.sub_category_name,
       pc.campaign_text,
       COUNT(pr.rating) AS ratings_count,
-      m.manufacturer_name,
-      CASE WHEN uf.product_id IS NULL THEN false ELSE true END AS is_favorite
+      m.manufacturer_name
+     
     
     FROM products p
     LEFT JOIN product_reviews pr ON p.id = pr.product_id
@@ -545,7 +544,7 @@ app.get(
     LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
     LEFT JOIN categories c ON p.category_id = c.category_id
     LEFT JOIN sub_categories sc ON p.sub_category_id = sc.sub_category_id
-    LEFT JOIN users_favorites uf ON p.id = uf.product_id AND uf.user_id = $2
+   
     WHERE p.sub_category_id = $1 
     GROUP BY 
     p.id, 
@@ -554,13 +553,12 @@ app.get(
     pc.campaign_text, 
     c.category_name,
     sc.sub_category_name,
-    m.manufacturer_name,
-    uf.product_id;
+    m.manufacturer_name;
+  
       `;
 
       const productsRequest = await pool.query(productsQuery, [
         sub_category_id,
-        user_id,
       ]);
       const productsRows = productsRequest.rows;
 
