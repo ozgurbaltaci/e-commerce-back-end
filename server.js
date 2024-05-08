@@ -33,7 +33,7 @@ app.post("/uploadProduct", async (req, res) => {
   const {
     product_name,
     price,
-    discountedPrice,
+    discounted_price,
     image,
     description,
     stock_quantity,
@@ -50,7 +50,7 @@ app.post("/uploadProduct", async (req, res) => {
       [
         product_name,
         parseFloat(price),
-        discountedPrice ? parseFloat(discountedPrice) : null,
+        discounted_price ? parseFloat(discounted_price) : null,
         image,
         description,
         parseInt(stock_quantity),
@@ -1168,19 +1168,41 @@ app.put(
   }
 );
 
-app.get("/getCurrentUser/:user_id", async (req, res) => {
+app.get("/getCurrentUser/:user_id", verifyToken, async (req, res) => {
   try {
-    const userId = req.params.user_id;
+    const userId = parseInt(req.params.user_id);
 
-    // Replace the following with your actual database query to retrieve orders with product information
-    const result = await pool.query("SELECT * FROM users WHERE user_id = $1 ", [
-      userId,
-    ]);
+    // Verify the JWT token
+    const decoded = jwt.verify(req.token, process.env.ACCESS_TOKEN_SECRET);
 
-    res.status(200).json(result.rows[0]);
+    // Ensure the decoded user ID matches the one from the route parameter
+    if (decoded.userId !== userId) {
+      return res.status(403).json({
+        message:
+          "Forbidden Request: User ID in token does not match the request!",
+      });
+    }
+
+    // Fetch user data from the database
+    const { rows } = await pool.query(
+      "SELECT * FROM users WHERE user_id = $1",
+      [userId]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Return the user data
+    res.status(200).json(rows[0]);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error." });
+    console.error("Error fetching user data:", error);
+    if (
+      error.name === "JsonWebTokenError" ||
+      error.name === "TokenExpiredError"
+    ) {
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
