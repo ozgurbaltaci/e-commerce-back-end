@@ -20,13 +20,34 @@ app.use(
 
 function verifyToken(req, res, next) {
   const bearerHeader = req.headers["authorization"];
+
+  // Check if Authorization header is present
   if (typeof bearerHeader !== "undefined") {
+    // Extract token from header
     const bearer = bearerHeader.split(" ");
     const bearerToken = bearer[1];
+
+    // Set token in the request object for further use
     req.token = bearerToken;
-    next();
+
+    // Verify the token
+    jwt.verify(bearerToken, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+      if (err) {
+        // If token is invalid, send 403 Forbidden status
+        return res.status(403).json({
+          message: "Token is invalid!",
+        });
+      } else {
+        // If token is valid, attach user ID to request object
+        req.userId = decoded.userId;
+        next();
+      }
+    });
   } else {
-    res.sendStatus(403);
+    // If no Authorization header is present, send 403 Forbidden status
+    res.status(403).json({
+      message: "No authorization header is present!",
+    });
   }
 }
 app.post("/uploadProduct", async (req, res) => {
@@ -1168,20 +1189,9 @@ app.put(
   }
 );
 
-app.get("/getCurrentUser/:user_id", verifyToken, async (req, res) => {
+app.get("/getCurrentUser", verifyToken, async (req, res) => {
   try {
-    const userId = parseInt(req.params.user_id);
-
-    // Verify the JWT token
-    const decoded = jwt.verify(req.token, process.env.ACCESS_TOKEN_SECRET);
-
-    // Ensure the decoded user ID matches the one from the route parameter
-    if (decoded.userId !== userId) {
-      return res.status(403).json({
-        message:
-          "Forbidden Request: User ID in token does not match the request!",
-      });
-    }
+    const userId = req.userId;
 
     // Fetch user data from the database
     const { rows } = await pool.query(
