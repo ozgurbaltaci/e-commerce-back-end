@@ -45,7 +45,7 @@ function verifyToken(req, res, next) {
     });
   } else {
     // If no Authorization header is present, send 403 Forbidden status
-    res.status(403).json({
+    res.status(401).json({
       message: "No authorization header is present!",
     });
   }
@@ -271,8 +271,8 @@ app.get("/getDeneme", async (req, res) => {
   }
 });
 
-app.get("/getProducts", async (req, res) => {
-  const { user_id } = req.query;
+app.get("/getProducts", verifyToken, async (req, res) => {
+  const user_id = req.userId;
   try {
     // Fetch all products and related data in a single query
     const productsQuery = `
@@ -713,8 +713,9 @@ function calculateAverageRating(reviews) {
   const sum = reviews.reduce((total, review) => total + parseFloat(review), 0);
   return sum / reviews.length;
 }
-app.post("/saveRatingAndReview/:user_id/:product_id", async (req, res) => {
-  const { user_id, product_id } = req.params;
+app.post("/saveRatingAndReview/:product_id", verifyToken, async (req, res) => {
+  const user_id = req.userId;
+  const { product_id } = req.params;
   const { ratingPoint, review, manufacturer_id } = req.body;
 
   try {
@@ -746,10 +747,10 @@ app.post("/saveRatingAndReview/:user_id/:product_id", async (req, res) => {
   }
 });
 
-app.get("/getFavoritesOfUser/:user_id", async (req, res) => {
+app.get("/getFavoritesOfUser", verifyToken, async (req, res) => {
   try {
     // Get the user_id from the URL parameter
-    const user_id = req.params.user_id;
+    const user_id = req.userId;
     // Fetch favorite products for the specified user with additional data
     const favoritesQuery = `
 SELECT
@@ -841,9 +842,9 @@ WHERE uf.user_id = $1;
   }
 });
 
-app.get("/getCart/:userId", async (req, res) => {
+app.get("/getCart", verifyToken, async (req, res) => {
   try {
-    const userId = req.params.userId;
+    const userId = req.userId;
 
     // Fetch cart data based on userId
     const cartQuery = `
@@ -892,8 +893,9 @@ WHERE c.user_id = $1;
     res.status(500).json({ error: " error" });
   }
 });
-app.put("/updateDesiredAmount/:user_id/:id", async (req, res) => {
-  const { user_id, id } = req.params;
+app.put("/updateDesiredAmount/:product_id", verifyToken, async (req, res) => {
+  const user_id = req.userId;
+  const { product_id } = req.params;
   const { desired_amount } = req.body;
 
   try {
@@ -904,7 +906,11 @@ app.put("/updateDesiredAmount/:user_id/:id", async (req, res) => {
     `;
 
     // Use the pool to execute the SQL query
-    const result = await pool.query(updateQuery, [desired_amount, user_id, id]);
+    const result = await pool.query(updateQuery, [
+      desired_amount,
+      user_id,
+      product_id,
+    ]);
 
     // Check if any rows were affected by the update
     if (result.rowCount === 0) {
@@ -920,25 +926,29 @@ app.put("/updateDesiredAmount/:user_id/:id", async (req, res) => {
   }
 });
 
-app.post("/addToCart/:user_id/:product_id/:price_on_add", async (req, res) => {
-  const user_id = req.params.user_id;
-  const product_id = req.params.product_id;
-  const price_on_add = req.params.price_on_add;
+app.post(
+  "/addToCart/:product_id/:price_on_add",
+  verifyToken,
+  async (req, res) => {
+    const user_id = req.userId;
+    const product_id = req.params.product_id;
+    const price_on_add = req.params.price_on_add;
 
-  try {
-    const request = await pool.query(
-      "INSERT INTO users_cart (cart_id, user_id, product_id, desired_amount, price_on_add, add_date) VALUES (default, $1, $2, 1, $3, CURRENT_TIMESTAMP) RETURNING *",
-      [user_id, product_id, price_on_add]
-    );
+    try {
+      const request = await pool.query(
+        "INSERT INTO users_cart (cart_id, user_id, product_id, desired_amount, price_on_add, add_date) VALUES (default, $1, $2, 1, $3, CURRENT_TIMESTAMP) RETURNING *",
+        [user_id, product_id, price_on_add]
+      );
 
-    const insertedRow = request.rows[0]; // Assuming only one row is returned
+      const insertedRow = request.rows[0]; // Assuming only one row is returned
 
-    res.status(201).json(insertedRow);
-  } catch (err) {
-    res.status(500).send();
-    console.error(err.message);
+      res.status(201).json(insertedRow);
+    } catch (err) {
+      res.status(500).send();
+      console.error(err.message);
+    }
   }
-});
+);
 
 const generateOrderId = () => {
   const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -958,9 +968,9 @@ const isOrderIdUnique = async (orderId) => {
   return result.rows[0].count === 0;
 };
 
-app.post("/saveOrder/:user_id", async (req, res) => {
+app.post("/saveOrder", verifyToken, async (req, res) => {
   try {
-    const userId = req.params.user_id;
+    const userId = req.userId;
     const { selectedProducts, receiverName, receiverPhone, deliveryAddress } =
       req.body;
 
@@ -997,9 +1007,9 @@ app.post("/saveOrder/:user_id", async (req, res) => {
   }
 });
 
-app.get("/getOrders/:user_id", async (req, res) => {
+app.get("/getOrders", verifyToken, async (req, res) => {
   try {
-    const userId = req.params.user_id;
+    const userId = req.userId;
 
     // Replace the following with your actual database query to retrieve orders with product information
     const result = await pool.query(
@@ -1216,9 +1226,9 @@ app.get("/getCurrentUser", verifyToken, async (req, res) => {
   }
 });
 
-app.put("/updateUser/:user_id", async (req, res) => {
+app.put("/updateUser", verifyToken, async (req, res) => {
   try {
-    const userId = req.params.user_id;
+    const userId = req.userId;
     const { currentUser } = req.body;
 
     // Replace the following with your actual database query to retrieve orders with product information
@@ -1239,9 +1249,9 @@ app.put("/updateUser/:user_id", async (req, res) => {
   }
 });
 
-app.put("/updatePassword/:user_id", async (req, res) => {
+app.put("/updatePassword", verifyToken, async (req, res) => {
   try {
-    const userId = req.params.user_id;
+    const userId = req.userId;
     const { newPassword, currentPassword } = req.body;
 
     // Validate request body
@@ -1287,9 +1297,9 @@ app.put("/updatePassword/:user_id", async (req, res) => {
   }
 });
 
-app.get("/getReviewsOfCurrentUser/:user_id", async (req, res) => {
+app.get("/getReviewsOfCurrentUser", verifyToken, async (req, res) => {
   try {
-    const userId = req.params.user_id;
+    const userId = req.userId;
 
     // Replace the following with your actual database query to retrieve orders with product information
     const result = await pool.query(
@@ -1385,9 +1395,9 @@ app.get("/getCoupons", async (req, res) => {
   }
 });
 
-app.get("/getSavedAddressesOfUser/:user_id", async (req, res) => {
+app.get("/getSavedAddressesOfUser", verifyToken, async (req, res) => {
   try {
-    const userId = req.params.user_id;
+    const userId = req.userId;
 
     const result = await pool.query(
       "SELECT * FROM users_saved_addresses WHERE user_id = $1 ",
@@ -1409,9 +1419,9 @@ app.get("/getSavedAddressesOfUser/:user_id", async (req, res) => {
   }
 });
 
-app.put("/saveNewAddressToCurrentUser/:user_id", async (req, res) => {
+app.put("/saveNewAddressToCurrentUser", verifyToken, async (req, res) => {
   try {
-    const { user_id } = req.params;
+    const user_id = req.userId;
     const { address_data } = req.body;
     const result = await pool.query(
       "INSERT INTO users_saved_addresses VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
@@ -1437,8 +1447,8 @@ app.put("/saveNewAddressToCurrentUser/:user_id", async (req, res) => {
   }
 });
 
-app.post("/addToFavorite/:user_id/:product_id", async (req, res) => {
-  const user_id = req.params.user_id;
+app.post("/addToFavorite/:product_id", verifyToken, async (req, res) => {
+  const user_id = req.userId;
   const product_id = req.params.product_id;
 
   try {
@@ -1454,8 +1464,8 @@ app.post("/addToFavorite/:user_id/:product_id", async (req, res) => {
   }
 });
 
-app.delete("/removeFromFavorite/:user_id/:product_id", async (req, res) => {
-  const user_id = req.params.user_id;
+app.delete("/removeFromFavorite/:product_id", verifyToken, async (req, res) => {
+  const user_id = req.userId;
   const product_id = req.params.product_id;
 
   try {
@@ -1471,8 +1481,8 @@ app.delete("/removeFromFavorite/:user_id/:product_id", async (req, res) => {
   }
 });
 
-app.delete("/removeFromCart/:user_id/:product_id", async (req, res) => {
-  const user_id = req.params.user_id;
+app.delete("/removeFromCart/:product_id", verifyToken, async (req, res) => {
+  const user_id = req.userId;
   const product_id = req.params.product_id;
 
   try {
