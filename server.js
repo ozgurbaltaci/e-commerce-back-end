@@ -45,13 +45,19 @@ function verifyToken(req, res, next) {
     });
   } else {
     //If the endpoint is also available for non-authenticated users:
-    if (req.path !== "/getProducts") {
+    if (
+      req.path === "/getProducts" ||
+      req.path === "/searchProducts" ||
+      req.path.startsWith("/getProductsOfCurrentSubCategory") ||
+      req.path.startsWith("/getManufacturerAndProducts")
+    ) {
+      // If the route is one of the allowed routes, continue without authentication
+      next();
+    } else {
+      // If the route is not allowed for non-authenticated users, send 401 Unauthorized status
       return res.status(401).json({
         message: "No authorization header is present!",
       });
-    } else {
-      // If the route is getProducts, continue without authentication
-      next();
     }
   }
 }
