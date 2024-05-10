@@ -35,7 +35,7 @@ function verifyToken(req, res, next) {
       if (err) {
         // If token is invalid, send 403 Forbidden status
         return res.status(403).json({
-          message: "Token is invalid!",
+          message: "Your session token is invalid! Please log in again!",
         });
       } else {
         // If token is valid, attach user ID to request object
@@ -44,10 +44,15 @@ function verifyToken(req, res, next) {
       }
     });
   } else {
-    // If no Authorization header is present, send 403 Forbidden status
-    res.status(401).json({
-      message: "No authorization header is present!",
-    });
+    //If the endpoint is also available for non-authenticated users:
+    if (req.path !== "/getProducts") {
+      return res.status(401).json({
+        message: "No authorization header is present!",
+      });
+    } else {
+      // If the route is getProducts, continue without authentication
+      next();
+    }
   }
 }
 app.post("/uploadProduct", async (req, res) => {
@@ -293,7 +298,8 @@ app.get("/getProducts", verifyToken, async (req, res) => {
     MAX(pr.rating) AS max_rating,
     pc.campaign_text,
     m.manufacturer_name,
-    CASE WHEN uf.product_id IS NULL THEN false ELSE true END AS is_favorite
+    CASE WHEN uf.product_id IS NULL THEN false ELSE true END AS is_favorite,
+    COALESCE(c.desired_amount, 0) AS cart_amount
 FROM 
     products p
 LEFT JOIN 
@@ -304,13 +310,16 @@ LEFT JOIN
     manufacturers m ON p.manufacturer_id = m.manufacturer_id
 LEFT JOIN 
     users_favorites uf ON p.id = uf.product_id AND uf.user_id = $1
+LEFT JOIN
+    users_cart c ON p.id = c.product_id AND c.user_id = $1
     
 GROUP BY 
     p.id, 
     m.manufacturer_id, 
     pc.campaign_text, 
     m.manufacturer_name,
-    uf.product_id;
+    uf.product_id,
+    c.desired_amount;
 
     `;
 
@@ -342,6 +351,7 @@ GROUP BY
           manufacturerName: item.manufacturer_name,
           category_id: item.category_id,
           sub_category_id: item.sub_category_id,
+          cart_amount: item.cart_amount,
         });
       }
 
@@ -765,12 +775,14 @@ SELECT
   p.product_status,
   pr.rating,
   pc.campaign_text,
-  m.manufacturer_name
+  m.manufacturer_name,
+  COALESCE(c.desired_amount, 0) AS cart_amount
 FROM users_favorites uf
 JOIN products p ON uf.product_id = p.id
 LEFT JOIN product_reviews pr ON p.id = pr.product_id
 LEFT JOIN product_campaigns pc ON p.id = pc.product_id
 LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id
+LEFT JOIN users_cart c ON p.id = c.product_id AND c.user_id = $1
 
 WHERE uf.user_id = $1;
 `;
@@ -799,6 +811,7 @@ WHERE uf.user_id = $1;
           ratingsCount: 0,
           campaigns: [],
           manufacturerName: item.manufacturer_name,
+          cart_amount: item.cart_amount,
         });
       }
       if (item.rating !== null) {
