@@ -273,6 +273,63 @@ app.post("/createPayment", verifyToken, async (req, res) => {
   });
 });
 
+app.get("/applyCoupon", verifyToken, async (req, res) => {
+  const userId = req.userId;
+
+  try {
+    let { couponCode, totalItemPrice } = req.query;
+
+    // Convert coupon code to lowercase
+    couponCode = couponCode.toLowerCase();
+
+    // Check if couponCode is provided
+    if (!couponCode) {
+      return res.status(400).json({ error: "Coupon code is required" });
+    }
+
+    // Query the database to validate the coupon code
+    const couponQuery = `
+      SELECT
+        coupon_id,
+        coupon_title,
+        coupon_description,
+        validity_start_date,
+        validity_end_date,
+        available_manufacturer_id,
+        coupon_discount_amount,
+        coupon_discount_percentage,
+        coupon_lower_limit,
+        coupon_code
+      FROM 
+        coupons
+      WHERE 
+        LOWER(coupon_code) = $1
+        AND NOW() BETWEEN validity_start_date AND validity_end_date;
+    `;
+
+    const couponRequest = await pool.query(couponQuery, [couponCode]);
+    const coupon = couponRequest.rows[0];
+
+    // Check if the coupon exists and is valid
+    if (!coupon) {
+      return res.status(404).json({ message: "Coupon not found or expired" });
+    } else if (coupon.coupon_lower_limit > totalItemPrice) {
+      return res.status(404).json({
+        message:
+          "Your item total should be at least " +
+          coupon.coupon_lower_limit +
+          "TL to apply this coupon code!!!",
+      });
+    }
+
+    // Send the discount back to the client
+    res.json(coupon);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.get("/getDeneme", async (req, res) => {
   try {
     const allUsers = await pool.query("SELECT * FROM deneme");
@@ -998,8 +1055,13 @@ const isOrderIdUnique = async (orderId) => {
 app.post("/saveOrder", verifyToken, async (req, res) => {
   try {
     const userId = req.userId;
-    const { selectedProducts, receiverName, receiverPhone, deliveryAddress } =
-      req.body;
+    const {
+      selectedProducts,
+      receiverName,
+      receiverPhone,
+      deliveryAddress,
+      applied_discount,
+    } = req.body;
 
     const order_id = generateOrderId();
 
@@ -1010,7 +1072,7 @@ app.post("/saveOrder", verifyToken, async (req, res) => {
 
       // Replace the following with your actual database query to insert into orders_table
       await pool.query(
-        "INSERT INTO orders_table (order_id, user_id, product_id, desired_amount, price_on_add, order_status_id, order_date, manufacturer_id, delivery_address, receiver_phone, receiver_name) VALUES ($1, $2, $3, $4, $5, 1, CURRENT_TIMESTAMP, $6, $7, $8, $9)",
+        "INSERT INTO orders_table (order_id, user_id, product_id, desired_amount, price_on_add, order_status_id, order_date, manufacturer_id, delivery_address, receiver_phone, receiver_name, applied_discount) VALUES ($1, $2, $3, $4, $5, 1, CURRENT_TIMESTAMP, $6, $7, $8, $9, $10)",
         [
           order_id,
           userId,
@@ -1021,6 +1083,7 @@ app.post("/saveOrder", verifyToken, async (req, res) => {
           deliveryAddress,
           receiverPhone,
           receiverName,
+          applied_discount,
         ]
       );
     });
@@ -1040,7 +1103,7 @@ app.get("/getOrders", verifyToken, async (req, res) => {
 
     // Replace the following with your actual database query to retrieve orders with product information
     const result = await pool.query(
-      "SELECT o.order_id, o.desired_amount, o.price_on_add, o.order_status_id, o.order_date, os.order_status, p.product_name, p.description, p.image, p.manufacturer_id, m.manufacturer_name FROM orders_table o LEFT JOIN products p ON o.product_id = p.id LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id LEFT JOIN order_status os ON o.order_status_id = os.order_status_id WHERE o.user_id = $1 ORDER BY o.order_id;",
+      "SELECT o.order_id, o.desired_amount, o.price_on_add, o.order_status_id, o.order_date, os.order_status, o.applied_discount, p.product_name, p.description, p.image, p.manufacturer_id, m.manufacturer_name FROM orders_table o LEFT JOIN products p ON o.product_id = p.id LEFT JOIN manufacturers m ON p.manufacturer_id = m.manufacturer_id LEFT JOIN order_status os ON o.order_status_id = os.order_status_id WHERE o.user_id = $1 ORDER BY o.order_id;",
       [userId]
     );
 
@@ -1060,6 +1123,7 @@ app.get("/getOrders", verifyToken, async (req, res) => {
           order_status: row.order_status,
           products: [],
           total_price: 0, // Initialize total_price for the order
+          applied_discount: row.applied_discount,
         };
         ordersWithProducts.push(currentOrder);
       }
@@ -1090,9 +1154,9 @@ app.get("/getOrders", verifyToken, async (req, res) => {
   }
 });
 
-app.get("/getManufacturersOrders/:manufacturer_id", async (req, res) => {
+app.get("/getManufacturersOrders", verifyToken, async (req, res) => {
   try {
-    const manufacturerId = req.params.manufacturer_id;
+    const manufacturerId = req.manufacturerId;
 
     // Fetch manufacturer information
     const manufacturerInfoQuery = await pool.query(
@@ -1189,15 +1253,16 @@ app.get("/getManufacturersOrders/:manufacturer_id", async (req, res) => {
   }
 });
 
-app.put("/updateManufacturer/:manufacturer_id", async (req, res) => {
+app.put("/updateManufacturer", verifyToken, async (req, res) => {
   try {
-    const { manufacturer_id } = req.params;
+    const manufacturer_id = req.manufacturerId;
     const { manufacturer_image } = req.body;
 
     const result = await pool.query(
       "UPDATE manufacturers SET manufacturer_image = $1 WHERE manufacturer_id = $2 ",
       [manufacturer_image, manufacturer_id]
     );
+    console.log(manufacturer_id);
     res.status(201).send();
   } catch (error) {
     console.error(error);
@@ -1205,26 +1270,23 @@ app.put("/updateManufacturer/:manufacturer_id", async (req, res) => {
   }
 });
 
-app.put(
-  "/updateOrderStatus/:order_id/:manufacturer_id/:order_status_id",
-  async (req, res) => {
-    try {
-      const order_status_id = parseInt(req.params.order_status_id);
-      const order_id = req.params.order_id;
-      const manufacturer_id = req.params.manufacturer_id;
+app.put("/updateOrderStatus/:order_id/:order_status_id", async (req, res) => {
+  try {
+    const order_status_id = parseInt(req.params.order_status_id);
+    const order_id = req.params.order_id;
+    const manufacturer_id = req.manufacturerId;
 
-      // Replace the following with your actual database query to retrieve orders with product information
-      const result = await pool.query(
-        "UPDATE orders_table SET order_status_id = $1 WHERE order_id = $2 AND manufacturer_id = $3",
-        [order_status_id, order_id, manufacturer_id]
-      );
-      res.status(200).send();
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Internal server error." });
-    }
+    // Replace the following with your actual database query to retrieve orders with product information
+    const result = await pool.query(
+      "UPDATE orders_table SET order_status_id = $1 WHERE order_id = $2 AND manufacturer_id = $3",
+      [order_status_id, order_id, manufacturer_id]
+    );
+    res.status(200).send();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error." });
   }
-);
+});
 
 app.get("/getCurrentUser", verifyToken, async (req, res) => {
   try {
