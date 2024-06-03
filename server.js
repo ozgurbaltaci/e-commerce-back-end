@@ -61,7 +61,8 @@ function verifyToken(req, res, next) {
     }
   }
 }
-app.post("/uploadProduct", async (req, res) => {
+app.post("/uploadProduct", verifyToken, async (req, res) => {
+  const manufacturerId = req.manufacturerId;
   const {
     product_name,
     price,
@@ -71,7 +72,6 @@ app.post("/uploadProduct", async (req, res) => {
     stock_quantity,
     category_id,
     sub_category_id,
-    manufacturer_id,
   } = req.body;
   const product = req.body;
   console.log("gelen product", product, "stock", stock_quantity);
@@ -140,6 +140,57 @@ app.post("/register", async (req, res) => {
             user_mail,
             user_phone,
             user_role,
+            hashedPassword,
+          ]
+        );
+
+        res.status(201).send();
+      } catch (err) {
+        res.status(500).send();
+        console.error(err.message);
+      }
+    }
+  } catch (err) {
+    res.status(500).send();
+    console.error(err.message);
+  }
+});
+app.post("/sellerRegister", async (req, res) => {
+  const {
+    user_name,
+    user_mail,
+    user_password,
+    contact_person_phone_number,
+    contact_person_full_name,
+  } = req.body;
+  const hashedPassword = await bcrypt.hash(user_password, 10);
+
+  // Check if required fields are empty
+  if (
+    !user_name ||
+    !user_mail ||
+    !contact_person_phone_number ||
+    !contact_person_full_name ||
+    !user_password
+  ) {
+    return res.status(400).json({ error: "All fields are required." });
+  }
+  try {
+    const checkMail = await pool.query(
+      "SELECT user_mail from users WHERE user_mail=$1",
+      [user_mail]
+    );
+    if (checkMail.rows.length > 0) {
+      return res.status(409).json({ error: "All fields are required." });
+    } else {
+      try {
+        const request = await pool.query(
+          "INSERT INTO manufacturers (manufacturer_id, manufacturer_name, manufacturer_email, contact_person_full_name, contact_person_phone_number, manufacturer_password) VALUES (default, $1, $2, $3, $4, $5  )",
+          [
+            user_name,
+            user_mail,
+            contact_person_full_name,
+            contact_person_phone_number,
             hashedPassword,
           ]
         );
