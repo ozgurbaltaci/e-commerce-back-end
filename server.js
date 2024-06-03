@@ -254,6 +254,55 @@ app.post("/login", async (req, res) => {
     res.status(500).send("Server Error");
   }
 });
+app.post("/sellerLogin", async (req, res) => {
+  try {
+    const { user_mail, user_password } = req.body;
+
+    // Check if the user with the provided email exists in the database
+    const user = await pool.query(
+      "SELECT * FROM manufacturers WHERE manufacturer_email = $1",
+      [user_mail]
+    );
+
+    if (user.rows.length === 0) {
+      return res.status(401).json({ message: "User can not be found" });
+    }
+    // Compare the provided password with the hashed password stored in the database
+    const passwordMatch = await bcrypt.compare(
+      user_password,
+      user.rows[0].manufacturer_password
+    );
+
+    if (!passwordMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // If the credentials are valid, generate an access token
+    const accessToken = jwt.sign(
+      { manufacturerId: user.rows[0].manufacturer_id },
+
+      process.env.ACCESS_TOKEN_SECRET,
+      {
+        expiresIn: "1h", // Set an expiration time for the access token
+      }
+    );
+    const expirationTime = new Date(new Date().getTime() + 36000 * 1000);
+
+    res.status(200).json({
+      manufacturer_id: user.rows[0].manufacturer_id,
+      accessToken: accessToken,
+      manufacturer_name: user.rows[0].manufacturer_name,
+      manufacturer_email: user.rows[0].manufacturer_email,
+      contact_person_full_name: user.rows[0].contact_person_full_name,
+      contact_person_phone_number: user.rows[0].contact_person_phone_number,
+
+      accessTokenExpirationTime: expirationTime,
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
 
 app.post("/createPayment", verifyToken, async (req, res) => {
   jwt.verify(req.token, process.env.ACCESS_TOKEN_SECRET, (err, authData) => {
