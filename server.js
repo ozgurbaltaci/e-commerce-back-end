@@ -40,6 +40,7 @@ function verifyToken(req, res, next) {
       } else {
         // If token is valid, attach user ID to request object
         req.userId = decoded.userId;
+        req.manufacturerId = decoded.manufacturerId;
         next();
       }
     });
@@ -87,7 +88,7 @@ app.post("/uploadProduct", verifyToken, async (req, res) => {
         description,
         parseInt(stock_quantity),
         "active",
-        parseInt(manufacturer_id),
+        parseInt(manufacturerId),
         parseInt(category_id),
         parseInt(sub_category_id),
 
@@ -1370,23 +1371,27 @@ app.put("/updateManufacturer", verifyToken, async (req, res) => {
   }
 });
 
-app.put("/updateOrderStatus/:order_id/:order_status_id", async (req, res) => {
-  try {
-    const order_status_id = parseInt(req.params.order_status_id);
-    const order_id = req.params.order_id;
-    const manufacturer_id = req.manufacturerId;
+app.put(
+  "/updateOrderStatus/:order_id/:order_status_id",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const order_status_id = parseInt(req.params.order_status_id);
+      const order_id = req.params.order_id;
+      const manufacturer_id = req.manufacturerId;
 
-    // Replace the following with your actual database query to retrieve orders with product information
-    const result = await pool.query(
-      "UPDATE orders_table SET order_status_id = $1 WHERE order_id = $2 AND manufacturer_id = $3",
-      [order_status_id, order_id, manufacturer_id]
-    );
-    res.status(200).send();
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error." });
+      // Replace the following with your actual database query to retrieve orders with product information
+      const result = await pool.query(
+        "UPDATE orders_table SET order_status_id = $1 WHERE order_id = $2 AND manufacturer_id = $3",
+        [order_status_id, order_id, manufacturer_id]
+      );
+      res.status(200).send();
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error." });
+    }
   }
-});
+);
 
 app.get("/getCurrentUser", verifyToken, async (req, res) => {
   try {
