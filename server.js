@@ -163,6 +163,7 @@ app.post("/sellerRegister", async (req, res) => {
     user_password,
     contact_person_phone_number,
     contact_person_full_name,
+    manufacturer_description,
   } = req.body;
   const hashedPassword = await bcrypt.hash(user_password, 10);
 
@@ -172,7 +173,8 @@ app.post("/sellerRegister", async (req, res) => {
     !user_mail ||
     !contact_person_phone_number ||
     !contact_person_full_name ||
-    !user_password
+    !user_password ||
+    !manufacturer_description
   ) {
     return res.status(400).json({ error: "All fields are required." });
   }
@@ -186,13 +188,14 @@ app.post("/sellerRegister", async (req, res) => {
     } else {
       try {
         const request = await pool.query(
-          "INSERT INTO manufacturers (manufacturer_id, manufacturer_name, manufacturer_email, contact_person_full_name, contact_person_phone_number, manufacturer_password) VALUES (default, $1, $2, $3, $4, $5  )",
+          "INSERT INTO manufacturers (manufacturer_id, manufacturer_name, manufacturer_email, contact_person_full_name, contact_person_phone_number, manufacturer_password, manufacturer_description) VALUES (default, $1, $2, $3, $4, $5, $6  )",
           [
             user_name,
             user_mail,
             contact_person_full_name,
             contact_person_phone_number,
             hashedPassword,
+            manufacturer_description,
           ]
         );
 
@@ -443,7 +446,7 @@ app.get("/getDeneme", async (req, res) => {
 app.get("/getProducts", verifyToken, async (req, res) => {
   const user_id = req.userId;
   try {
-    // Fetch all products and related data in a single query
+    // Fetch latest 8 products and related data in a single query
     const productsQuery = `
     SELECT
     p.id,
@@ -476,15 +479,18 @@ LEFT JOIN
     users_favorites uf ON p.id = uf.product_id AND uf.user_id = $1
 LEFT JOIN
     users_cart c ON p.id = c.product_id AND c.user_id = $1
-    
+
 GROUP BY 
     p.id, 
     m.manufacturer_id, 
     pc.campaign_text, 
     m.manufacturer_name,
     uf.product_id,
-    c.desired_amount;
+    c.desired_amount
 
+ORDER BY 
+    p.id DESC
+LIMIT 16;
     `;
 
     const productsRequest = await pool.query(productsQuery, [user_id]);
