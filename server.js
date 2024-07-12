@@ -1848,6 +1848,6 @@ async function updateManufacturerRating(manufacturer_id) {
   }
 }
 
-app.listen(3002, () => {
-  console.log("Server has started on port 3002");
+app.listen(8080, () => {
+  console.log("Server has started on port 8080");
 });
